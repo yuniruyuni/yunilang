@@ -78,6 +78,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     span: Span::dummy() 
                 }));
             }
+            Pattern::EnumVariant { .. } => {
+                return Err(YuniError::Codegen(CodegenError::Unimplemented { 
+                    feature: "Enum variant patterns not yet implemented".to_string(), 
+                    span: Span::dummy() 
+                }));
+            }
         }
 
         Ok(())

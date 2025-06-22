@@ -74,6 +74,7 @@ pub enum BorrowKind {
 #[derive(Debug)]
 pub struct Scope {
     symbols: HashMap<String, Symbol>,
+    types: HashMap<String, TypeInfo>,
     parent: Option<Box<Scope>>,
 }
 
@@ -81,6 +82,7 @@ impl Scope {
     pub fn new() -> Self {
         Self {
             symbols: HashMap::new(),
+            types: HashMap::new(),
             parent: None,
         }
     }
@@ -88,6 +90,7 @@ impl Scope {
     pub fn with_parent(parent: Scope) -> Self {
         Self {
             symbols: HashMap::new(),
+            types: HashMap::new(),
             parent: Some(Box::new(parent)),
         }
     }
@@ -141,5 +144,22 @@ impl Scope {
                 span: Span::dummy(),
             }),
         }
+    }
+
+    pub fn define_type(&mut self, type_info: TypeInfo) -> AnalysisResult<()> {
+        if self.types.contains_key(&type_info.name) {
+            return Err(AnalysisError::DuplicateType {
+                name: type_info.name.clone(),
+                span: type_info.span,
+            });
+        }
+        self.types.insert(type_info.name.clone(), type_info);
+        Ok(())
+    }
+
+    pub fn lookup_type(&self, name: &str) -> Option<&TypeInfo> {
+        self.types
+            .get(name)
+            .or_else(|| self.parent.as_ref().and_then(|parent| parent.lookup_type(name)))
     }
 }

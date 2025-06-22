@@ -205,8 +205,19 @@ pub struct StructFieldInit {
 pub struct EnumVariantExpr {
     pub enum_name: String,
     pub variant: String,
-    pub fields: Vec<Expression>,
+    pub fields: EnumVariantFields,
     pub span: Span,
+}
+
+/// 列挙型バリアントのフィールド定義
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EnumVariantFields {
+    /// タプルライク（位置指定）フィールド: Some(42)
+    Tuple(Vec<Expression>),
+    /// 構造体ライク（名前付き）フィールド: Some { value: 42 }
+    Struct(Vec<StructFieldInit>),
+    /// フィールドなし: None
+    Unit,
 }
 
 /// 配列式

@@ -176,6 +176,8 @@ pub enum Token {
     Comma,
     #[token(";")]
     Semicolon,
+    #[token("::")]
+    ColonColon,
     #[token(":")]
     Colon,
     #[token(".")]
@@ -293,6 +295,7 @@ impl fmt::Display for Token {
             Token::RightBrace => write!(f, "}}"),
             Token::Comma => write!(f, ","),
             Token::Semicolon => write!(f, ";"),
+            Token::ColonColon => write!(f, "::"),
             Token::Colon => write!(f, ":"),
             Token::Dot => write!(f, "."),
             Token::Arrow => write!(f, "->"),

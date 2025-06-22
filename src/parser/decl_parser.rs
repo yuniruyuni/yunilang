@@ -14,6 +14,14 @@ impl Parser {
                 let type_def = self.parse_type_def()?;
                 Ok(Item::TypeDef(type_def))
             }
+            Some(Token::Struct) => {
+                let struct_def = self.parse_struct_def()?;
+                Ok(Item::TypeDef(TypeDef::Struct(struct_def)))
+            }
+            Some(Token::Enum) => {
+                let enum_def = self.parse_enum_def()?;
+                Ok(Item::TypeDef(TypeDef::Enum(enum_def)))
+            }
             Some(Token::Fn) => {
                 let func = self.parse_function_decl()?;
                 Ok(Item::Function(func))
@@ -87,6 +95,7 @@ impl Parser {
             let variant_name = self.expect_identifier()?;
             let mut fields = Vec::new();
 
+            // タプルライクフィールド: Variant(field1: Type1, field2: Type2)
             if self.match_token(&Token::LeftParen) {
                 while !self.check(&Token::RightParen) && !self.is_at_end() {
                     let field_name = self.expect_identifier()?;
@@ -105,6 +114,26 @@ impl Parser {
                     }
                 }
                 self.expect(Token::RightParen)?;
+            }
+            // 構造体ライクフィールド: Variant { field1: Type1, field2: Type2 }
+            else if self.match_token(&Token::LeftBrace) {
+                while !self.check(&Token::RightBrace) && !self.is_at_end() {
+                    let field_name = self.expect_identifier()?;
+                    self.expect(Token::Colon)?;
+                    let ty = self.parse_type()?;
+                    let field_span = self.current_span();
+
+                    fields.push(Field {
+                        name: field_name,
+                        ty,
+                        span: field_span.into(),
+                    });
+
+                    if !self.check(&Token::RightBrace) {
+                        self.expect(Token::Comma)?;
+                    }
+                }
+                self.expect(Token::RightBrace)?;
             }
 
             let variant_span = self.current_span();
@@ -129,6 +158,24 @@ impl Parser {
         })
     }
 
+    /// 構造体定義を解析（`struct Name { ... }` 構文）
+    fn parse_struct_def(&mut self) -> ParseResult<StructDef> {
+        let start = self.current_span().start;
+        self.expect(Token::Struct)?;
+        let name = self.expect_identifier()?;
+        
+        self.parse_struct_body(name)
+    }
+
+    /// 列挙型定義を解析（`enum Name { ... }` 構文）
+    fn parse_enum_def(&mut self) -> ParseResult<EnumDef> {
+        let start = self.current_span().start;
+        self.expect(Token::Enum)?;
+        let name = self.expect_identifier()?;
+        
+        self.parse_enum_body(name)
+    }
+
     /// 関数宣言を解析
     pub(super) fn parse_function_decl(&mut self) -> ParseResult<FunctionDecl> {
         let start = self.current_span().start;
@@ -150,7 +197,7 @@ impl Parser {
         self.expect(Token::RightParen)?;
 
         // 戻り値型
-        let return_type = if self.match_token(&Token::Arrow) {
+        let return_type = if self.match_token(&Token::Colon) {
             Some(Box::new(self.parse_type()?))
         } else {
             None
@@ -202,7 +249,7 @@ impl Parser {
         self.expect(Token::RightParen)?;
 
         // 戻り値型
-        let return_type = if self.match_token(&Token::Arrow) {
+        let return_type = if self.match_token(&Token::Colon) {
             Some(Box::new(self.parse_type()?))
         } else {
             None
@@ -322,7 +369,7 @@ impl Parser {
         let start = self.current_span().start;
         self.expect(Token::Package)?;
         let name = self.expect_identifier()?;
-        self.expect(Token::Semicolon)?;
+        // package宣言はセミコロンを要求しない
         
         let span = self.span_from(start);
         Ok(PackageDecl { name, span })
@@ -342,7 +389,7 @@ impl Parser {
                 None
             };
             
-            self.expect(Token::Semicolon)?;
+            // import文はセミコロンを要求しない
             let span = self.span_from(start);
             
             imports.push(Import { path, alias, span });

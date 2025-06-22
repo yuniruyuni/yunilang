@@ -425,6 +425,24 @@ impl<'a> BorrowChecker<'a> {
                 }
                 Ok(())
             }
+            Pattern::EnumVariant { fields, .. } => {
+                match fields {
+                    crate::ast::EnumVariantPatternFields::Tuple(patterns) => {
+                        for pattern in patterns {
+                            self.register_pattern(pattern)?;
+                        }
+                    }
+                    crate::ast::EnumVariantPatternFields::Struct(fields) => {
+                        for (_, pattern) in fields {
+                            self.register_pattern(pattern)?;
+                        }
+                    }
+                    crate::ast::EnumVariantPatternFields::Unit => {
+                        // フィールドなし
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }

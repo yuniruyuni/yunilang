@@ -25,6 +25,7 @@ pub enum Type {
     F32,
     F64,
     Bool,
+    Str,
     String,
     Void,
 

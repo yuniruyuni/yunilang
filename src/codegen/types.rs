@@ -49,6 +49,7 @@ impl<'ctx> TypeManager<'ctx> {
             Type::F32 => Ok(self.context.f32_type().into()),
             Type::F64 => Ok(self.context.f64_type().into()),
             Type::Bool => Ok(self.context.bool_type().into()),
+            Type::Str => Ok(self.context.ptr_type(AddressSpace::default()).into()),
             Type::String => Ok(self.context.ptr_type(AddressSpace::default()).into()),
             Type::Array(elem_ty) => {
                 let elem_type = self.ast_type_to_llvm(elem_ty)?;
@@ -179,6 +180,7 @@ impl<'ctx> TypeManager<'ctx> {
             Type::F32 => Ok(self.context.f32_type().const_zero().into()),
             Type::F64 => Ok(self.context.f64_type().const_zero().into()),
             Type::Bool => Ok(self.context.bool_type().const_zero().into()),
+            Type::Str => Ok(self.context.ptr_type(AddressSpace::default()).const_null().into()),
             Type::String => Ok(self.context.ptr_type(AddressSpace::default()).const_null().into()),
             Type::Array(_) | Type::Reference(_, _) => {
                 Ok(self.context.ptr_type(AddressSpace::default()).const_null().into())

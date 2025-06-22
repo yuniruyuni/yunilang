@@ -92,6 +92,10 @@ impl Parser {
         self.expect(Token::If)?;
 
         let condition = self.parse_expression_internal()?;
+        // if文の条件式の後は必ずブロックが来るため、{を明示的にチェック
+        if !self.check(&Token::LeftBrace) {
+            return Err(self.error("Expected '{' after if condition".to_string()));
+        }
         let then_branch = self.parse_block()?;
 
         let else_branch = if self.match_token(&Token::Else) {

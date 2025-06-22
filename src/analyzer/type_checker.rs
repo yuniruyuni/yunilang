@@ -23,6 +23,9 @@ impl TypeChecker {
         // ビルトイン型を登録
         checker.register_builtin_types();
         
+        // ビルトイン関数を登録
+        checker.register_builtin_functions();
+        
         checker
     }
     
@@ -32,7 +35,7 @@ impl TypeChecker {
             "i8", "i16", "i32", "i64", "i128", "i256", 
             "u8", "u16", "u32", "u64", "u128", "u256",
             "f8", "f16", "f32", "f64", 
-            "bool", "String", "void",
+            "bool", "str", "String", "void",
         ];
 
         for type_name in builtin_types {
@@ -46,6 +49,33 @@ impl TypeChecker {
                 },
             );
         }
+    }
+    
+    /// ビルトイン関数を登録
+    fn register_builtin_functions(&mut self) {
+        // println関数
+        let println_sig = FunctionSignature {
+            name: "println".to_string(),
+            params: vec![("value".to_string(), Type::String)],
+            return_type: Type::Void,
+            lives_clause: None,
+            is_method: false,
+            receiver_type: None,
+            span: Span::dummy(),
+        };
+        self.functions.insert("println".to_string(), println_sig);
+
+        // sqrt関数
+        let sqrt_sig = FunctionSignature {
+            name: "sqrt".to_string(),
+            params: vec![("value".to_string(), Type::F64)],
+            return_type: Type::F64,
+            lives_clause: None,
+            is_method: false,
+            receiver_type: None,
+            span: Span::dummy(),
+        };
+        self.functions.insert("sqrt".to_string(), sqrt_sig);
     }
     
     /// 型定義を登録
@@ -137,6 +167,7 @@ impl TypeChecker {
             Type::F32 => "f32".to_string(),
             Type::F64 => "f64".to_string(),
             Type::Bool => "bool".to_string(),
+            Type::Str => "str".to_string(),
             Type::String => "String".to_string(),
             Type::Void => "void".to_string(),
             Type::UserDefined(name) => name.clone(),
@@ -178,6 +209,10 @@ impl TypeChecker {
         self.is_integer_type(ty) || self.is_float_type(ty)
     }
     
+    pub fn is_string_type(&self, ty: &Type) -> bool {
+        matches!(ty, Type::String | Type::Str)
+    }
+    
     /// フィールドの型を取得
     pub fn get_field_type(&self, struct_type: &Type, field_name: &str, span: Span) -> AnalysisResult<Type> {
         match struct_type {
@@ -217,7 +252,23 @@ impl TypeChecker {
     /// 二項演算子の結果型を取得
     pub fn binary_op_result_type(&self, op: &BinaryOp, left: &Type, right: &Type, span: Span) -> AnalysisResult<Type> {
         match op {
-            BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Modulo => {
+            BinaryOp::Add => {
+                // 数値の加算
+                if self.types_compatible(left, right) && self.is_numeric_type(left) {
+                    Ok(left.clone())
+                }
+                // 文字列の連結
+                else if self.is_string_type(left) && self.is_string_type(right) {
+                    Ok(Type::String) // 文字列連結の結果は常にString型
+                } else {
+                    Err(AnalysisError::TypeMismatch {
+                        expected: self.type_to_string(left),
+                        found: self.type_to_string(right),
+                        span,
+                    })
+                }
+            }
+            BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Modulo => {
                 if self.types_compatible(left, right) && self.is_numeric_type(left) {
                     Ok(left.clone())
                 } else {
@@ -324,17 +375,26 @@ impl TypeChecker {
         }
     }
     
+    /// 型の互換性をチェック（公開メソッド）
+    pub fn types_compatible(&self, expected: &Type, actual: &Type) -> bool {
+        self.types_compatible_internal(expected, actual)
+    }
+    
     /// 型の互換性をチェック（内部実装）
-    fn types_compatible(&self, expected: &Type, actual: &Type) -> bool {
+    fn types_compatible_internal(&self, expected: &Type, actual: &Type) -> bool {
         match (expected, actual) {
             // 同じ型は互換
             (a, b) if a == b => true,
+            
+            // 文字列型の互換性（Stringとstrは相互変換可能）
+            (Type::String, Type::Str) => true,
+            (Type::Str, Type::String) => true,
             
             // 参照型の互換性
             (Type::Reference(ref_a, mut_a),
              Type::Reference(ref_b, mut_b)) => {
                 // 可変参照から不変参照への変換は可能
-                (*mut_a == *mut_b || (!*mut_a && *mut_b)) && self.types_compatible(ref_a, ref_b)
+                (*mut_a == *mut_b || (!*mut_a && *mut_b)) && self.types_compatible_internal(ref_a, ref_b)
             }
             
             // その他は非互換

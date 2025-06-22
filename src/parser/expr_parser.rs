@@ -443,8 +443,14 @@ impl Parser {
                 let span = self.current_span();
                 self.advance();
                 
+                // パス（Enum::Variant など）を解析
+                if self.check(&Token::ColonColon) {
+                    return self.parse_path_expression(name);
+                }
+                
                 // 構造体リテラルの場合
-                if self.check(&Token::LeftBrace) {
+                // ただし、識別子が小文字で始まる場合（変数名）は構造体リテラルとして扱わない
+                if self.check(&Token::LeftBrace) && name.chars().next().unwrap_or('a').is_uppercase() {
                     return self.parse_struct_literal(name);
                 }
                 
@@ -497,6 +503,9 @@ impl Parser {
                 let span = Span::dummy(); // TODO: 適切なspan計算
                 Ok(Expression::Array(ArrayExpr { elements, span }))
             }
+            Some(Token::Match) => {
+                self.parse_match_expression()
+            }
             _ => Err(self.error("Expected expression".to_string())),
         }
     }
@@ -529,5 +538,78 @@ impl Parser {
             fields,
             span,
         }))
+    }
+
+    /// パス式を解析（Enum::Variant のような構文）
+    fn parse_path_expression(&mut self, first_segment: String) -> ParseResult<Expression> {
+        let mut segments = vec![first_segment];
+        
+        while self.match_token(&Token::ColonColon) {
+            let segment = self.expect_identifier()?;
+            segments.push(segment);
+        }
+        
+        let span = Span::dummy(); // TODO: 適切なspan計算
+        
+        // 2つのセグメントかつ構造体/タプル/ユニット構文がある場合、Enum Variantとして扱う
+        if segments.len() == 2 {
+            let enum_name = segments[0].clone();
+            let variant_name = segments[1].clone();
+            
+            // 構造体ライクフィールド: Enum::Variant { field: value }
+            if self.check(&Token::LeftBrace) {
+                self.advance();
+                let mut fields = Vec::new();
+                
+                while !self.check(&Token::RightBrace) && !self.is_at_end() {
+                    let field_name = self.expect_identifier()?;
+                    self.expect(Token::Colon)?;
+                    let value = self.parse_expression_internal()?;
+                    
+                    fields.push(StructFieldInit {
+                        name: field_name,
+                        value,
+                    });
+                    
+                    if !self.check(&Token::RightBrace) {
+                        self.expect(Token::Comma)?;
+                    }
+                }
+                
+                self.expect(Token::RightBrace)?;
+                
+                return Ok(Expression::EnumVariant(EnumVariantExpr {
+                    enum_name,
+                    variant: variant_name,
+                    fields: crate::ast::EnumVariantFields::Struct(fields),
+                    span,
+                }));
+            }
+            // タプルライクフィールド: Enum::Variant(args)
+            else if self.check(&Token::LeftParen) {
+                self.advance();
+                let args = self.parse_arguments()?;
+                self.expect(Token::RightParen)?;
+                
+                return Ok(Expression::EnumVariant(EnumVariantExpr {
+                    enum_name,
+                    variant: variant_name,
+                    fields: crate::ast::EnumVariantFields::Tuple(args),
+                    span,
+                }));
+            }
+            // ユニットバリアント: Enum::Variant
+            else {
+                return Ok(Expression::EnumVariant(EnumVariantExpr {
+                    enum_name,
+                    variant: variant_name,
+                    fields: crate::ast::EnumVariantFields::Unit,
+                    span,
+                }));
+            }
+        }
+        
+        // 通常のパス式として扱う
+        Ok(Expression::Path(PathExpr { segments, span }))
     }
 }

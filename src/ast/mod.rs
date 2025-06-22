@@ -27,7 +27,7 @@ pub use declarations::{
 // 式を再エクスポート
 pub use expressions::{
     ArrayExpr, AssignmentExpr, BinaryExpr, BinaryOp, BooleanLit, CallExpr, CastExpr,
-    DereferenceExpr, EnumVariantExpr, Expression, FieldExpr, FloatLit, Identifier, IndexExpr,
+    DereferenceExpr, EnumVariantExpr, EnumVariantFields, Expression, FieldExpr, FloatLit, Identifier, IndexExpr,
     IntegerLit, MatchArm, MatchExpr, MethodCallExpr, PathExpr, ReferenceExpr, StringLit,
     StructFieldInit, StructLiteral, TemplateStringLit, TemplateStringPart, TupleExpr, UnaryExpr,
     UnaryOp,
@@ -40,4 +40,4 @@ pub use statements::{
 };
 
 // パターンを再エクスポート
-pub use patterns::Pattern;
+pub use patterns::{Pattern, EnumVariantPatternFields};
