@@ -639,7 +639,8 @@ impl Parser {
                 // ブロックを式として扱うために、Block式が必要
                 let span = else_block.span;
                 Some(Box::new(Expression::Block(BlockExpr {
-                    block: else_block,
+                    statements: else_block.statements,
+                    last_expr: None,
                     span,
                 })))
             }
@@ -652,7 +653,8 @@ impl Parser {
         // then_branchをBlock式として扱う
         let then_span = then_branch.span;
         let then_expr = Expression::Block(BlockExpr {
-            block: then_branch,
+            statements: then_branch.statements,
+            last_expr: None,
             span: then_span,
         });
 

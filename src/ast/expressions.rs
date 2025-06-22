@@ -280,6 +280,39 @@ pub struct IfExpr {
 /// ブロック式
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockExpr {
-    pub block: super::statements::Block,
+    pub statements: Vec<super::statements::Statement>,
+    pub last_expr: Option<Box<Expression>>,
     pub span: Span,
+}
+
+impl Expression {
+    /// 式のSpanを取得する
+    pub fn span(&self) -> Span {
+        match self {
+            Expression::Integer(lit) => lit.span,
+            Expression::Float(lit) => lit.span,
+            Expression::String(lit) => lit.span,
+            Expression::TemplateString(lit) => lit.span,
+            Expression::Boolean(lit) => lit.span,
+            Expression::Identifier(id) => id.span,
+            Expression::Path(path) => path.span,
+            Expression::Binary(binary) => binary.span,
+            Expression::Unary(unary) => unary.span,
+            Expression::Call(call) => call.span,
+            Expression::MethodCall(method_call) => method_call.span,
+            Expression::Index(index) => index.span,
+            Expression::Field(field) => field.span,
+            Expression::Reference(ref_expr) => ref_expr.span,
+            Expression::Dereference(deref) => deref.span,
+            Expression::StructLit(struct_lit) => struct_lit.span,
+            Expression::EnumVariant(enum_var) => enum_var.span,
+            Expression::Array(array) => array.span,
+            Expression::Tuple(tuple) => tuple.span,
+            Expression::Cast(cast) => cast.span,
+            Expression::Assignment(assign) => assign.span,
+            Expression::Match(match_expr) => match_expr.span,
+            Expression::If(if_expr) => if_expr.span,
+            Expression::Block(block_expr) => block_expr.span,
+        }
+    }
 }

@@ -45,6 +45,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         let builder = context.create_builder();
         let pass_manager = PassManager::create(&module);
 
+        // ターゲット情報を設定
+        Target::initialize_all(&inkwell::targets::InitializationConfig::default());
+        let target_triple = TargetMachine::get_default_triple();
+        module.set_triple(&target_triple);
+
         // パスマネージャを初期化
         pass_manager.initialize();
 
@@ -143,14 +148,14 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 関数を宣言
     fn declare_function(&mut self, func: &FunctionDecl) -> YuniResult<()> {
-        let param_types: Vec<BasicMetadataTypeEnum> = func
+        let param_types: Vec<Type> = func
             .params
             .iter()
-            .map(|param| self.type_manager.ast_type_to_metadata(&param.ty))
-            .collect::<YuniResult<Vec<_>>>()?;
+            .map(|param| param.ty.clone())
+            .collect();
 
         let return_type = func.return_type.as_ref().map(|t| &**t).unwrap_or(&Type::Void);
-        let fn_type = self.type_manager.create_function_type(&[], return_type, false)?;
+        let fn_type = self.type_manager.create_function_type(&param_types, return_type, false)?;
 
         let function = self.module.add_function(&func.name, fn_type, None);
         self.functions.insert(func.name.clone(), function);
@@ -341,101 +346,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    /// エントリブロックにallocaを作成
-    pub fn create_entry_block_alloca(&self, name: &str, ty: &Type) -> YuniResult<PointerValue<'ctx>> {
-        let builder = self.context.create_builder();
-        
-        let entry = self.current_function
-            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { 
-                message: "No current function".to_string() 
-            }))?
-            .get_first_basic_block()
-            .unwrap();
-            
-        match entry.get_first_instruction() {
-            Some(first_inst) => builder.position_before(&first_inst),
-            None => builder.position_at_end(entry),
-        }
-        
-        let llvm_type = self.type_manager.ast_type_to_llvm(ty)?;
-        Ok(builder.build_alloca(llvm_type, name)?)
-    }
-
-    /// 変数をスコープに追加
-    pub fn add_variable(&mut self, name: &str, ptr: PointerValue<'ctx>, ty: Type, is_mutable: bool) -> YuniResult<()> {
-        let symbol = Symbol {
-            ptr,
-            ty,
-            is_mutable,
-        };
-        self.scope_manager.define(name.to_string(), symbol);
-        Ok(())
-    }
-
-    /// 型を推論（簡単な実装）
-    pub fn infer_type(&mut self, expr: &Expression) -> YuniResult<Type> {
-        match expr {
-            Expression::Integer(lit) => {
-                if let Some(suffix) = &lit.suffix {
-                    match suffix.as_str() {
-                        "i8" => Ok(Type::I8),
-                        "i16" => Ok(Type::I16),
-                        "i32" => Ok(Type::I32),
-                        "i64" => Ok(Type::I64),
-                        "i128" => Ok(Type::I128),
-                        "u8" => Ok(Type::U8),
-                        "u16" => Ok(Type::U16),
-                        "u32" => Ok(Type::U32),
-                        "u64" => Ok(Type::U64),
-                        "u128" => Ok(Type::U128),
-                        _ => Ok(Type::I64),
-                    }
-                } else {
-                    Ok(Type::I64)
-                }
-            }
-            Expression::Float(lit) => {
-                if let Some(suffix) = &lit.suffix {
-                    match suffix.as_str() {
-                        "f32" => Ok(Type::F32),
-                        "f64" => Ok(Type::F64),
-                        _ => Ok(Type::F64),
-                    }
-                } else {
-                    Ok(Type::F64)
-                }
-            }
-            Expression::Boolean(_) => Ok(Type::Bool),
-            Expression::String(_) => Ok(Type::String),
-            Expression::TemplateString(_) => Ok(Type::String),
-            _ => Err(YuniError::Codegen(CodegenError::Internal {
-                message: "Type inference not implemented for this expression".to_string(),
-            })),
-        }
-    }
 
 
-    // ヘルパー関数（未実装のものを追加）
-    pub fn compile_field_assignment(&mut self, _field_expr: &FieldExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Field assignment not yet implemented".to_string(),
-            span: Span::dummy(),
-        }))
-    }
 
-    pub fn compile_index_assignment(&mut self, _index_expr: &IndexExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Index assignment not yet implemented".to_string(),
-            span: Span::dummy(),
-        }))
-    }
-
-    pub fn compile_deref_assignment(&mut self, _deref_expr: &DereferenceExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Dereference assignment not yet implemented".to_string(),
-            span: Span::dummy(),
-        }))
-    }
     
     /// LLVM IRをファイルに書き込む
     pub fn write_llvm_ir(&self, path: &std::path::Path) -> YuniResult<()> {

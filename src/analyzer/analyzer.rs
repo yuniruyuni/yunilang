@@ -558,17 +558,20 @@ impl SemanticAnalyzer {
     /// 関数呼び出し式の解析
     fn analyze_call_expression(&mut self, call: &CallExpr) -> AnalysisResult<Type> {
         if let Expression::Identifier(ident) = call.callee.as_ref() {
-            // println関数の特別な処理（任意の型を受け入れる）
+            // println関数の特別な処理（任意の数の引数と型を受け入れる）
             if ident.name == "println" {
-                if call.args.len() != 1 {
+                // 最低1つの引数が必要
+                if call.args.is_empty() {
                     return Err(AnalysisError::ArgumentCountMismatch {
                         expected: 1,
-                        found: call.args.len(),
+                        found: 0,
                         span: call.span,
                     });
                 }
-                // 引数の型を解析するが、型チェックはしない（任意の型を受け入れる）
-                self.analyze_expression(&call.args[0])?;
+                // 全ての引数の型を解析するが、型チェックはしない（任意の型を受け入れる）
+                for arg in &call.args {
+                    self.analyze_expression(arg)?;
+                }
                 return Ok(Type::Void);
             }
             
@@ -997,7 +1000,7 @@ impl SemanticAnalyzer {
         let mut last_type = Type::Void;
 
         // ブロック内の文を順番に解析
-        for stmt in &block_expr.block.statements {
+        for stmt in &block_expr.statements {
             match stmt {
                 Statement::Expression(expr) => {
                     last_type = self.analyze_expression(expr)?;
@@ -1007,6 +1010,11 @@ impl SemanticAnalyzer {
                     last_type = Type::Void;
                 }
             }
+        }
+        
+        // 最後の式がある場合はその型を返す
+        if let Some(last_expr) = &block_expr.last_expr {
+            last_type = self.analyze_expression(last_expr)?;
         }
 
         self.scope_stack.pop();

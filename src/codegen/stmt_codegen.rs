@@ -300,4 +300,62 @@ impl<'ctx> CodeGenerator<'ctx> {
         let current_block = self.builder.get_insert_block().unwrap();
         current_block.get_terminator().is_some()
     }
+
+    /// 式から型を推論
+    pub fn infer_type(&mut self, expr: &Expression) -> YuniResult<Type> {
+        self.expression_type(expr)
+    }
+
+    /// エントリブロックにallocaを作成
+    pub fn create_entry_block_alloca(&self, name: &str, ty: &Type) -> YuniResult<inkwell::values::PointerValue<'ctx>> {
+        let builder = self.context.create_builder();
+        let function = self.current_function
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "No current function".to_string()
+            }))?;
+        
+        let entry = function.get_first_basic_block().unwrap();
+        match entry.get_first_instruction() {
+            Some(first_instr) => builder.position_before(&first_instr),
+            None => builder.position_at_end(entry),
+        }
+
+        let llvm_type = self.type_manager.ast_type_to_llvm(ty)?;
+        Ok(builder.build_alloca(llvm_type, name)?)
+    }
+
+    /// 変数をスコープに追加
+    pub fn add_variable(&mut self, name: &str, ptr: inkwell::values::PointerValue<'ctx>, ty: Type, is_mutable: bool) -> YuniResult<()> {
+        let symbol = Symbol {
+            ptr,
+            ty,
+            is_mutable,
+        };
+        self.scope_manager.define(name.to_string(), symbol);
+        Ok(())
+    }
+
+    /// フィールド代入をコンパイル
+    pub fn compile_field_assignment(&mut self, _field_expr: &FieldExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
+        Err(YuniError::Codegen(CodegenError::Unimplemented {
+            feature: "Field assignment not yet implemented".to_string(),
+            span: Span::dummy(),
+        }))
+    }
+
+    /// インデックス代入をコンパイル
+    pub fn compile_index_assignment(&mut self, _index_expr: &IndexExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
+        Err(YuniError::Codegen(CodegenError::Unimplemented {
+            feature: "Index assignment not yet implemented".to_string(),
+            span: Span::dummy(),
+        }))
+    }
+
+    /// デリファレンス代入をコンパイル
+    pub fn compile_deref_assignment(&mut self, _deref_expr: &DereferenceExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
+        Err(YuniError::Codegen(CodegenError::Unimplemented {
+            feature: "Dereference assignment not yet implemented".to_string(),
+            span: Span::dummy(),
+        }))
+    }
 }

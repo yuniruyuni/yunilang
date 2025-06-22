@@ -280,11 +280,113 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 関数呼び出し式をコンパイル
     pub fn compile_call_expr(&mut self, call: &CallExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Function calls not yet implemented".to_string(),
-            span: call.span,
-        }))
+        // 関数名を取得
+        let func_name = match call.callee.as_ref() {
+            Expression::Identifier(id) => &id.name,
+            Expression::Path(path) => {
+                if path.segments.len() == 1 {
+                    &path.segments[0]
+                } else {
+                    return Err(YuniError::Codegen(CodegenError::Unimplemented {
+                        feature: "Multi-segment function paths not yet implemented".to_string(),
+                        span: call.span,
+                    }));
+                }
+            }
+            _ => {
+                return Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "Invalid function callee".to_string(),
+                    span: call.span,
+                }));
+            }
+        };
+
+        // printlnの特別な処理
+        if func_name == "println" {
+            return self.compile_println_call(&call.args, call.span);
+        }
+
+        // 通常の関数呼び出し
+        // 引数を先にコンパイル
+        let mut args = Vec::new();
+        for arg in &call.args {
+            let arg_value = self.compile_expression(arg)?;
+            args.push(arg_value.into());
+        }
+
+        // 関数を取得
+        let func = self.functions.get(func_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: func_name.clone(),
+                span: call.span,
+            }))?;
+
+        // 関数呼び出し
+        let call_result = self.builder.build_call(*func, &args, "call_result")?;
+        
+        if let Some(value) = call_result.try_as_basic_value().left() {
+            Ok(value)
+        } else {
+            // void関数の場合、unit値を返す
+            Ok(self.context.i32_type().const_zero().into())
+        }
+    }
+
+    /// println呼び出しのコンパイル
+    fn compile_println_call(&mut self, args: &[Expression], span: Span) -> YuniResult<BasicValueEnum<'ctx>> {
+        if args.is_empty() {
+            // 引数なしの場合は改行のみ
+            let newline_str = self.context.const_string(b"\n", true);
+            let global = self.module.add_global(newline_str.get_type(), None, "newline");
+            global.set_initializer(&newline_str);
+            global.set_constant(true);
+
+            let printf_fn = self.runtime_manager.get_function("printf")
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                    message: "printf function not found".to_string(),
+                }))?;
+
+            let ptr = global.as_pointer_value();
+            self.builder.build_call(printf_fn, &[ptr.into()], "println_call")?;
+            return Ok(self.context.i32_type().const_zero().into());
+        }
+
+        // 最初の引数をフォーマット文字列として使用
+        let format_arg = self.compile_expression(&args[0])?;
+        
+        if args.len() == 1 {
+            // 引数が1つの場合
+            let printf_fn = self.runtime_manager.get_function("printf")
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                    message: "printf function not found".to_string(),
+                }))?;
+
+            // 改行を追加したフォーマット文字列を作成
+            let newline_format = "%s\n";
+            let format_str = self.context.const_string(newline_format.as_bytes(), true);
+            let format_global = self.module.add_global(format_str.get_type(), None, "printf_format");
+            format_global.set_initializer(&format_str);
+            format_global.set_constant(true);
+
+            let format_ptr = format_global.as_pointer_value();
+            self.builder.build_call(printf_fn, &[format_ptr.into(), format_arg.into()], "println_call")?;
+        } else {
+            // 複数の引数がある場合（簡易実装）
+            let printf_fn = self.runtime_manager.get_function("printf")
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                    message: "printf function not found".to_string(),
+                }))?;
+
+            let mut printf_args = vec![format_arg.into()];
+            for i in 1..args.len() {
+                let arg_value = self.compile_expression(&args[i])?;
+                printf_args.push(arg_value.into());
+            }
+
+            self.builder.build_call(printf_fn, &printf_args, "println_call")?;
+        }
+
+        Ok(self.context.i32_type().const_zero().into())
     }
 
     /// メソッド呼び出し式をコンパイル
@@ -397,25 +499,213 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// if式をコンパイル
     pub fn compile_if_expr(&mut self, if_expr: &IfExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "If expressions not yet implemented".to_string(),
-            span: if_expr.span,
-        }))
+        let condition = self.compile_expression(&if_expr.condition)?;
+        
+        // 条件を bool に変換
+        let condition_bool = match condition {
+            BasicValueEnum::IntValue(int_val) => {
+                if int_val.get_type().get_bit_width() == 1 {
+                    int_val
+                } else {
+                    // 非ゼロかどうかで判定
+                    let zero = int_val.get_type().const_zero();
+                    self.builder.build_int_compare(IntPredicate::NE, int_val, zero, "condition")?
+                }
+            }
+            _ => return Err(YuniError::Codegen(CodegenError::TypeError {
+                expected: "bool".to_string(),
+                actual: "non-bool".to_string(),
+                span: if_expr.span,
+            })),
+        };
+
+        let function = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+        let then_bb = self.context.append_basic_block(function, "then");
+        let else_bb = self.context.append_basic_block(function, "else");
+        let merge_bb = self.context.append_basic_block(function, "merge");
+
+        // 条件分岐
+        self.builder.build_conditional_branch(condition_bool, then_bb, else_bb)?;
+
+        // then ブロック
+        self.builder.position_at_end(then_bb);
+        let then_value = self.compile_expression(&if_expr.then_branch)?;
+        self.builder.build_unconditional_branch(merge_bb)?;
+        let then_bb = self.builder.get_insert_block().unwrap();
+
+        // else ブロック
+        self.builder.position_at_end(else_bb);
+        let else_value = if let Some(else_branch) = &if_expr.else_branch {
+            self.compile_expression(else_branch)?
+        } else {
+            // else句がない場合はunit値
+            self.context.i32_type().const_zero().into()
+        };
+        self.builder.build_unconditional_branch(merge_bb)?;
+        let else_bb = self.builder.get_insert_block().unwrap();
+
+        // merge ブロック
+        self.builder.position_at_end(merge_bb);
+        
+        // 両方のブランチで同じ型の値を返す必要がある
+        if then_value.get_type() == else_value.get_type() {
+            let phi = self.builder.build_phi(then_value.get_type(), "if_result")?;
+            phi.add_incoming(&[(&then_value, then_bb), (&else_value, else_bb)]);
+            Ok(phi.as_basic_value())
+        } else {
+            // 型が異なる場合はunit値を返す
+            Ok(self.context.i32_type().const_zero().into())
+        }
     }
 
     /// ブロック式をコンパイル
     pub fn compile_block_expr(&mut self, block_expr: &BlockExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Block expressions not yet implemented".to_string(),
-            span: block_expr.span,
-        }))
+        // 新しいスコープを作成
+        self.scope_manager.push_scope();
+        
+        let mut last_value: BasicValueEnum = self.context.i32_type().const_zero().into();
+        
+        // ブロック内の文を順次コンパイル
+        for stmt in &block_expr.statements {
+            self.compile_statement(stmt)?;
+        }
+        
+        // 最後の式がある場合はその値を返す
+        if let Some(last_expr) = &block_expr.last_expr {
+            last_value = self.compile_expression(last_expr)?;
+        }
+        
+        // スコープを終了
+        self.scope_manager.pop_scope();
+        
+        Ok(last_value)
     }
 
     /// 値を文字列に変換
     pub fn value_to_string(&mut self, value: BasicValueEnum<'ctx>) -> YuniResult<BasicValueEnum<'ctx>> {
         // TODO: 実装
         Ok(value)
+    }
+
+    /// 式の型を推論する
+    pub fn expression_type(&mut self, expr: &Expression) -> YuniResult<Type> {
+        match expr {
+            Expression::Integer(lit) => {
+                if let Some(suffix) = &lit.suffix {
+                    match suffix.as_str() {
+                        "i8" => Ok(Type::I8),
+                        "i16" => Ok(Type::I16),
+                        "i32" => Ok(Type::I32),
+                        "i64" => Ok(Type::I64),
+                        "i128" => Ok(Type::I128),
+                        "u8" => Ok(Type::U8),
+                        "u16" => Ok(Type::U16),
+                        "u32" => Ok(Type::U32),
+                        "u64" => Ok(Type::U64),
+                        "u128" => Ok(Type::U128),
+                        _ => Ok(Type::I64), // デフォルト
+                    }
+                } else {
+                    Ok(Type::I64) // デフォルト
+                }
+            }
+            Expression::Float(lit) => {
+                if let Some(suffix) = &lit.suffix {
+                    match suffix.as_str() {
+                        "f32" => Ok(Type::F32),
+                        "f64" => Ok(Type::F64),
+                        _ => Ok(Type::F64), // デフォルト
+                    }
+                } else {
+                    Ok(Type::F64) // デフォルト
+                }
+            }
+            Expression::String(_) => Ok(Type::String),
+            Expression::Boolean(_) => Ok(Type::Bool),
+            Expression::Identifier(id) => {
+                if let Some(symbol) = self.scope_manager.lookup(&id.name) {
+                    Ok(symbol.ty.clone())
+                } else {
+                    Err(YuniError::Codegen(CodegenError::Undefined {
+                        name: id.name.clone(),
+                        span: id.span,
+                    }))
+                }
+            }
+            Expression::Path(path) => {
+                if path.segments.len() == 1 {
+                    let name = &path.segments[0];
+                    
+                    // 関数を探す
+                    if self.functions.contains_key(name) {
+                        // 関数ポインタ型として扱う（簡易実装）
+                        return Ok(Type::UserDefined(format!("fn_{}", name)));
+                    }
+                    
+                    // 変数として扱う
+                    if let Some(symbol) = self.scope_manager.lookup(name) {
+                        Ok(symbol.ty.clone())
+                    } else {
+                        Err(YuniError::Codegen(CodegenError::Undefined {
+                            name: name.clone(),
+                            span: path.span,
+                        }))
+                    }
+                } else {
+                    Err(YuniError::Codegen(CodegenError::Unimplemented {
+                        feature: "Multi-segment path type inference not implemented".to_string(),
+                        span: path.span,
+                    }))
+                }
+            }
+            Expression::Binary(binary) => {
+                let left_type = self.expression_type(&binary.left)?;
+                let right_type = self.expression_type(&binary.right)?;
+                
+                match &binary.op {
+                    BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Modulo => {
+                        if left_type == right_type {
+                            Ok(left_type)
+                        } else {
+                            // 型の自動昇格をサポート（簡易実装）
+                            Ok(left_type)
+                        }
+                    }
+                    BinaryOp::Lt | BinaryOp::Gt | BinaryOp::Le | BinaryOp::Ge | BinaryOp::Eq | BinaryOp::Ne |
+                    BinaryOp::And | BinaryOp::Or => Ok(Type::Bool),
+                    _ => Ok(left_type),
+                }
+            }
+            Expression::Unary(unary) => {
+                let operand_type = self.expression_type(&unary.expr)?;
+                match &unary.op {
+                    UnaryOp::Not => Ok(Type::Bool),
+                    UnaryOp::Negate => Ok(operand_type),
+                    _ => Ok(operand_type),
+                }
+            }
+            Expression::Call(call) => {
+                let func_name = match call.callee.as_ref() {
+                    Expression::Identifier(id) => &id.name,
+                    Expression::Path(path) if path.segments.len() == 1 => &path.segments[0],
+                    _ => return Err(YuniError::Codegen(CodegenError::Unimplemented {
+                        feature: "Complex function call type inference not implemented".to_string(),
+                        span: call.span,
+                    })),
+                };
+                
+                // println の特別な処理
+                if func_name == "println" {
+                    return Ok(Type::Void);
+                }
+                
+                // 関数の戻り値型を取得（簡易実装）
+                Ok(Type::Void) // デフォルト
+            }
+            _ => Err(YuniError::Codegen(CodegenError::Unimplemented {
+                feature: "Type inference not implemented for this expression".to_string(),
+                span: expr.span(),
+            })),
+        }
     }
 }
