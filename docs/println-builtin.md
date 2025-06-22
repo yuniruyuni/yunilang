@@ -1,60 +1,60 @@
-# println Builtin Function
+# println組み込み関数
 
-The `println` function is a builtin function in the Yuni language that prints values to the console.
+`println`関数は、コンソールに値を出力するYuni言語の組み込み関数です。
 
-## Features
+## 機能
 
-- **Variadic**: Accepts any number of arguments (including zero)
-- **Automatic String Conversion**: Converts all argument types to strings automatically
-- **Space Separation**: Multiple arguments are separated by spaces
-- **Type Support**: Handles:
-  - String literals and variables
-  - Integer types (all sizes)
-  - Floating-point types (all sizes)
-  - Boolean values (prints as "true" or "false")
+- **可変長引数**: 任意の個数の引数を受け取ります（ゼロ個も含む）
+- **自動文字列変換**: すべての引数型を自動的に文字列に変換します
+- **スペース区切り**: 複数の引数はスペースで区切られます
+- **型サポート**: 以下の型に対応:
+  - 文字列リテラルと変数
+  - 整数型（すべてのサイズ）
+  - 浮動小数点型（すべてのサイズ）
+  - ブール値（"true"または"false"として出力）
 
-## Usage Examples
+## 使用例
 
 ```yuni
-// Empty println prints a blank line
+// 空のprintlnは空行を出力
 println();
 
-// Single string argument
+// 単一の文字列引数
 println("Hello, World!");
 
-// Multiple arguments
-println("The answer is", 42);
+// 複数の引数
+println("答えは", 42);
 
-// Variables of different types
+// 異なる型の変数
 let name = "Alice";
 let age = 25;
 let height = 5.6;
 let is_student = true;
 
-println("Name:", name, "Age:", age, "Height:", height, "Student:", is_student);
-// Output: Name: Alice Age: 25 Height: 5.6 Student: true
+println("名前:", name, "年齢:", age, "身長:", height, "学生:", is_student);
+// 出力: 名前: Alice 年齢: 25 身長: 5.6 学生: true
 ```
 
-## Implementation Details
+## 実装詳細
 
-### Semantic Analysis
-- The `println` function is recognized as a builtin in the semantic analyzer
-- It bypasses normal function type checking since it's variadic
-- All arguments are type-checked to ensure they're valid expressions
+### 意味解析
+- `println`関数は意味解析器で組み込み関数として認識されます
+- 可変長引数のため通常の関数型チェックをバイパスします
+- すべての引数は有効な式であることが型チェックされます
 
-### Code Generation
-- Each argument is converted to a string using type-specific conversion functions:
-  - `yuni_i64_to_string` for integers
-  - `yuni_f64_to_string` for floats
-  - `yuni_bool_to_string` for booleans
-  - String values are used directly
-- Arguments are concatenated with spaces using `yuni_string_concat`
-- The final string is passed to `yuni_println` runtime function
+### コード生成
+- 各引数は型固有の変換関数を使用して文字列に変換されます:
+  - 整数用の`yuni_i64_to_string`
+  - 浮動小数点用の`yuni_f64_to_string`
+  - ブール値用の`yuni_bool_to_string`
+  - 文字列値は直接使用
+- 引数は`yuni_string_concat`を使用してスペースで連結されます
+- 最終的な文字列は`yuni_println`ランタイム関数に渡されます
 
-### Runtime Requirements
-The following runtime functions must be provided:
-- `yuni_println(str: *const u8)` - Prints a string and adds a newline
-- `yuni_string_concat(a: *const u8, b: *const u8) -> *const u8` - Concatenates two strings
-- `yuni_i64_to_string(val: i64) -> *const u8` - Converts integer to string
-- `yuni_f64_to_string(val: f64) -> *const u8` - Converts float to string
-- `yuni_bool_to_string(val: bool) -> *const u8` - Converts boolean to string
+### ランタイム要件
+以下のランタイム関数が提供される必要があります:
+- `yuni_println(str: *const u8)` - 文字列を出力し改行を追加
+- `yuni_string_concat(a: *const u8, b: *const u8) -> *const u8` - 2つの文字列を連結
+- `yuni_i64_to_string(val: i64) -> *const u8` - 整数を文字列に変換
+- `yuni_f64_to_string(val: f64) -> *const u8` - 浮動小数点を文字列に変換
+- `yuni_bool_to_string(val: bool) -> *const u8` - ブール値を文字列に変換
