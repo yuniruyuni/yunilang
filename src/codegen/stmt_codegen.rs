@@ -166,7 +166,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Then ブランチをコンパイル
         self.builder.position_at_end(then_block);
         self.compile_block(&if_stmt.then_branch)?;
-        if !self.current_block_has_terminator() {
+        let then_has_terminator = self.current_block_has_terminator();
+        if !then_has_terminator {
             self.builder.build_unconditional_branch(merge_block)?;
         }
 
@@ -178,12 +179,21 @@ impl<'ctx> CodeGenerator<'ctx> {
                 ElseBranch::If(nested_if) => self.compile_if_statement(nested_if)?,
             }
         }
-        if !self.current_block_has_terminator() {
+        let else_has_terminator = self.current_block_has_terminator();
+        if !else_has_terminator {
             self.builder.build_unconditional_branch(merge_block)?;
         }
 
-        // Merge ブロックで継続
-        self.builder.position_at_end(merge_block);
+        // 両方のブランチにターミネータがある場合、merge_blockは不要
+        // そうでなければ、merge_blockで継続
+        if !then_has_terminator || !else_has_terminator {
+            self.builder.position_at_end(merge_block);
+        } else {
+            // merge_blockが不要な場合は削除
+            unsafe {
+                merge_block.delete();
+            }
+        }
 
         Ok(())
     }

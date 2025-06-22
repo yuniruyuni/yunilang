@@ -572,10 +572,10 @@ mod tests {
         
         fn create_large_struct(): LargeStruct {
             return LargeStruct {
-                data1: 1,
-                data2: 2,
-                data3: 3,
-                data4: 4,
+                data1: 1i64,
+                data2: 2i64,
+                data3: 3i64,
+                data4: 4i64,
             };
         }
         

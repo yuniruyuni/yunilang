@@ -381,16 +381,23 @@ impl Parser {
                 self.advance();
 
                 // 型サフィックスをチェック
-                let suffix = if let Some(Token::Identifier(suffix)) = self.current_token() {
-                    if matches!(suffix.as_str(), "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128") {
+                let suffix = match self.current_token() {
+                    Some(Token::Identifier(suffix)) if matches!(suffix.as_str(), "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128") => {
                         let suffix = suffix.clone();
                         self.advance();
                         Some(suffix)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
+                    },
+                    Some(Token::I8) => { self.advance(); Some("i8".to_string()) },
+                    Some(Token::I16) => { self.advance(); Some("i16".to_string()) },
+                    Some(Token::I32) => { self.advance(); Some("i32".to_string()) },
+                    Some(Token::I64) => { self.advance(); Some("i64".to_string()) },
+                    Some(Token::I128) => { self.advance(); Some("i128".to_string()) },
+                    Some(Token::U8) => { self.advance(); Some("u8".to_string()) },
+                    Some(Token::U16) => { self.advance(); Some("u16".to_string()) },
+                    Some(Token::U32) => { self.advance(); Some("u32".to_string()) },
+                    Some(Token::U64) => { self.advance(); Some("u64".to_string()) },
+                    Some(Token::U128) => { self.advance(); Some("u128".to_string()) },
+                    _ => None,
                 };
 
                 Ok(Expression::Integer(IntegerLit { value, suffix, span: span.into() }))
@@ -401,16 +408,15 @@ impl Parser {
                 self.advance();
 
                 // 型サフィックスをチェック
-                let suffix = if let Some(Token::Identifier(suffix)) = self.current_token() {
-                    if matches!(suffix.as_str(), "f32" | "f64") {
+                let suffix = match self.current_token() {
+                    Some(Token::Identifier(suffix)) if matches!(suffix.as_str(), "f32" | "f64") => {
                         let suffix = suffix.clone();
                         self.advance();
                         Some(suffix)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
+                    },
+                    Some(Token::F32) => { self.advance(); Some("f32".to_string()) },
+                    Some(Token::F64) => { self.advance(); Some("f64".to_string()) },
+                    _ => None,
                 };
 
                 Ok(Expression::Float(FloatLit { value, suffix, span: span.into() }))

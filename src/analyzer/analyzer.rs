@@ -503,8 +503,36 @@ impl SemanticAnalyzer {
     /// 式の解析と型推論
     fn analyze_expression(&mut self, expr: &Expression) -> AnalysisResult<Type> {
         match expr {
-            Expression::Integer(_) => Ok(Type::I32),
-            Expression::Float(_) => Ok(Type::F64),
+            Expression::Integer(int_lit) => {
+                if let Some(suffix) = &int_lit.suffix {
+                    match suffix.as_str() {
+                        "i8" => Ok(Type::I8),
+                        "i16" => Ok(Type::I16),
+                        "i32" => Ok(Type::I32),
+                        "i64" => Ok(Type::I64),
+                        "i128" => Ok(Type::I128),
+                        "u8" => Ok(Type::U8),
+                        "u16" => Ok(Type::U16),
+                        "u32" => Ok(Type::U32),
+                        "u64" => Ok(Type::U64),
+                        "u128" => Ok(Type::U128),
+                        _ => Ok(Type::I32), // fallback
+                    }
+                } else {
+                    Ok(Type::I32) // default when no suffix
+                }
+            },
+            Expression::Float(float_lit) => {
+                if let Some(suffix) = &float_lit.suffix {
+                    match suffix.as_str() {
+                        "f32" => Ok(Type::F32),
+                        "f64" => Ok(Type::F64),
+                        _ => Ok(Type::F64), // fallback
+                    }
+                } else {
+                    Ok(Type::F64) // default when no suffix
+                }
+            },
             Expression::String(_) => Ok(Type::String),
             Expression::Boolean(_) => Ok(Type::Bool),
             Expression::Identifier(ident) => {
