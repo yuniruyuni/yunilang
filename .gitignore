@@ -79,3 +79,21 @@ lcov.info
 *.yuni.ast
 *.yuni.tokens
 .yuni/
+
+# Yuni compiled executables (without extension on Unix)
+examples/hello
+examples/hello_*
+examples/test_*
+examples/math_*
+examples/simple_*
+examples/template_*
+examples/control_*
+examples/println_*
+examples/arithmetic_*
+
+# Build artifacts that shouldn't be tracked
+runtime.o
+runtime.c
+build_and_run.sh
+EXECUTABLE_BUILD.md
+main_wrapper.c

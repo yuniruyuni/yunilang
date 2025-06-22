@@ -8,6 +8,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tempfile::TempDir;
 
 mod analyzer;
 mod ast;
@@ -33,6 +34,9 @@ struct Cli {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum EmitType {
+    /// Emit executable (default)
+    #[value(name = "executable")]
+    Executable,
     /// Emit LLVM IR (.ll)
     #[value(name = "llvm-ir")]
     LlvmIr,
@@ -51,12 +55,12 @@ enum Commands {
         /// The source file to compile
         input: PathBuf,
 
-        /// Output file (defaults to input filename with appropriate extension)
-        #[arg(short, long)]
+        /// Output file (for executables or object files)
+        #[arg(short = 'o', long)]
         output: Option<PathBuf>,
 
         /// What to emit
-        #[arg(long = "emit", value_enum, default_value = "obj")]
+        #[arg(long = "emit", value_enum, default_value = "executable")]
         emit: EmitType,
 
         /// Optimization level (0-3)
@@ -71,9 +75,9 @@ enum Commands {
         #[arg(long)]
         dump_tokens: bool,
 
-        /// Link with runtime to produce executable
+        /// Keep intermediate files (LLVM IR, object files)
         #[arg(long)]
-        link: bool,
+        keep_temps: bool,
     },
 
     /// Run a Yuni source file
@@ -118,8 +122,8 @@ fn main() -> Result<()> {
             opt_level,
             dump_ast,
             dump_tokens,
-            link,
-        } => compile(input, output, emit, opt_level, dump_ast, dump_tokens, link),
+            keep_temps,
+        } => compile(input, output, emit, opt_level, dump_ast, dump_tokens, keep_temps, cli.verbose),
         Commands::Run {
             input,
             args,
@@ -176,19 +180,19 @@ fn compile(
     opt_level: u8,
     dump_ast: bool,
     dump_tokens: bool,
-    link: bool,
+    keep_temps: bool,
+    verbose: bool,
 ) -> Result<()> {
-    log::info!(
-        "Compiling {:?} with optimization level O{}",
-        input,
-        opt_level
-    );
+    if verbose {
+        println!("{}: Compiling {:?} with optimization level O{}", 
+                "info".blue().bold(), input, opt_level);
+    }
 
     // Initialize compilation state
     let state = CompilationState::new(input.clone())?;
 
     // 1. Tokenize
-    log::debug!("Starting lexical analysis");
+    if verbose { println!("{}: Starting lexical analysis", "step".cyan().bold()); }
     let lexer = Lexer::new(&state.source);
     let tokens: Vec<_> = lexer.collect();
 
@@ -220,7 +224,7 @@ fn compile(
     }
 
     // 2. Parse
-    log::debug!("Starting parsing");
+    if verbose { println!("{}: Starting parsing", "step".cyan().bold()); }
     let mut parser = YuniParser::new(tokens);
     let ast = match parser.parse() {
         Ok(program) => program,
@@ -240,7 +244,7 @@ fn compile(
     }
 
     // 3. Semantic analysis
-    log::debug!("Starting semantic analysis");
+    if verbose { println!("{}: Starting semantic analysis", "step".cyan().bold()); }
     let mut analyzer = analyzer::SemanticAnalyzer::new();
     if let Err(e) = analyzer.analyze(&ast) {
         let diagnostic = Diagnostic::error()
@@ -251,7 +255,7 @@ fn compile(
     }
 
     // 4. Code generation
-    log::debug!("Starting code generation");
+    if verbose { println!("{}: Starting code generation", "step".cyan().bold()); }
     let context = inkwell::context::Context::create();
     let mut codegen =
         codegen::CodeGenerator::new(&context, &state.source_file.display().to_string());
@@ -259,43 +263,62 @@ fn compile(
     // Compile the AST
     codegen.compile_program(&ast)?;
 
-    // 5. Generate output
-    let output_path = output.unwrap_or_else(|| {
-        let mut path = input.clone();
-        path.set_extension(match emit {
-            EmitType::LlvmIr => "ll",
-            EmitType::Obj => "o",
-            EmitType::Asm => "s",
-        });
-        path
-    });
+    // Create temporary directory for intermediate files
+    let temp_dir = if keep_temps {
+        None
+    } else {
+        Some(TempDir::new().context("Failed to create temporary directory")?)
+    };
 
+    let get_temp_path = |name: &str| -> PathBuf {
+        if let Some(ref dir) = temp_dir {
+            dir.path().join(name)
+        } else {
+            input.parent().unwrap_or(Path::new(".")).join(name)
+        }
+    };
+
+    // Determine output path and handle different emit types
     match emit {
         EmitType::LlvmIr => {
-            log::info!("Writing LLVM IR to {:?}", output_path);
+            let output_path = output.unwrap_or_else(|| {
+                let mut path = input.clone();
+                path.set_extension("ll");
+                path
+            });
+            if verbose { println!("{}: Writing LLVM IR to {:?}", "step".cyan().bold(), output_path); }
             codegen.write_llvm_ir(&output_path)?;
+            println!("{}: Created LLVM IR file {:?}", "success".green().bold(), output_path);
+            return Ok(());
         }
         EmitType::Obj => {
-            log::info!("Writing object file to {:?}", output_path);
-            let opt = match opt_level {
-                0 => inkwell::OptimizationLevel::None,
-                1 => inkwell::OptimizationLevel::Less,
-                2 => inkwell::OptimizationLevel::Default,
-                3 => inkwell::OptimizationLevel::Aggressive,
-                _ => unreachable!(),
-            };
+            let output_path = output.unwrap_or_else(|| {
+                let mut path = input.clone();
+                path.set_extension("o");
+                path
+            });
+            if verbose { println!("{}: Writing object file to {:?}", "step".cyan().bold(), output_path); }
+            let opt = inkwell_opt_level(opt_level);
             codegen.write_object_file(&output_path, opt)?;
+            println!("{}: Created object file {:?}", "success".green().bold(), output_path);
+            return Ok(());
         }
         EmitType::Asm => {
-            log::info!("Writing assembly to {:?}", output_path);
+            let output_path = output.unwrap_or_else(|| {
+                let mut path = input.clone();
+                path.set_extension("s");
+                path
+            });
+            if verbose { println!("{}: Writing assembly to {:?}", "step".cyan().bold(), output_path); }
+            
             // First write LLVM IR to a temp file
-            let temp_ll = output_path.with_extension("ll");
+            let temp_ll = get_temp_path("temp.ll");
             codegen.write_llvm_ir(&temp_ll)?;
 
             // Use llc to convert to assembly
-            let status = Command::new("llc")
-                .arg("-O")
-                .arg(opt_level.to_string())
+            let llc_cmd = find_llc_command()?;
+            let status = Command::new(&llc_cmd)
+                .arg(format!("-O{}", opt_level))
                 .arg("-o")
                 .arg(&output_path)
                 .arg(&temp_ll)
@@ -306,62 +329,170 @@ fn compile(
                 anyhow::bail!("llc failed with status: {}", status);
             }
 
-            // Clean up temp file
-            fs::remove_file(temp_ll).ok();
+            // Clean up temp file if not keeping temps
+            if temp_dir.is_some() {
+                fs::remove_file(&temp_ll).ok();
+            }
+            
+            println!("{}: Created assembly file {:?}", "success".green().bold(), output_path);
+            return Ok(());
         }
-    }
+        EmitType::Executable => {
+            // This is the main case - build a complete executable
+            let executable_path = output.unwrap_or_else(|| {
+                let mut path = input.clone();
+                path.set_extension("");
+                if path.file_name().unwrap() == input.file_stem().unwrap() {
+                    // If input was "file.yuni", output should be "file", not "file."
+                    path
+                } else {
+                    path
+                }
+            });
 
-    // 6. Link if requested
-    if link && matches!(emit, EmitType::Obj) {
-        let exe_path = output_path.with_extension("");
-        log::info!("Linking executable to {:?}", exe_path);
+            if verbose {
+                println!("{}: Building executable {:?}", "step".cyan().bold(), executable_path);
+                println!("{}: Step 1 - Generating LLVM IR", "substep".yellow());
+            }
 
-        // Link with runtime
-        let runtime_path = Path::new("runtime.ll");
-        let runtime_obj = runtime_path.with_extension("o");
+            // Step 1: Generate LLVM IR for the main program
+            let program_ll = get_temp_path("program.ll");
+            codegen.write_llvm_ir(&program_ll)?;
 
-        // Compile runtime to object file if needed
-        if !runtime_obj.exists()
-            || runtime_path.metadata()?.modified()? > runtime_obj.metadata()?.modified()?
-        {
-            log::debug!("Compiling runtime.ll");
-            let status = Command::new("llc")
+            if verbose { println!("{}: Step 2 - Compiling program to object file", "substep".yellow()); }
+
+            // Step 2: Compile LLVM IR to object file
+            let program_obj = get_temp_path("program.o");
+            let llc_cmd = find_llc_command()?;
+            let status = Command::new(&llc_cmd)
                 .arg("-filetype=obj")
+                .arg(format!("-O{}", opt_level))
                 .arg("-o")
-                .arg(&runtime_obj)
-                .arg(runtime_path)
+                .arg(&program_obj)
+                .arg(&program_ll)
                 .status()
-                .context("Failed to compile runtime")?;
+                .context("Failed to run llc on program")?;
 
             if !status.success() {
-                anyhow::bail!("Failed to compile runtime");
+                anyhow::bail!("Failed to compile program LLVM IR to object file");
+            }
+
+            if verbose { println!("{}: Step 3 - Compiling runtime to object file", "substep".yellow()); }
+
+            // Step 3: Compile runtime.c to object file
+            let runtime_obj = get_temp_path("runtime.o");
+            let runtime_c_path = Path::new("src/runtime.c");
+            
+            if !runtime_c_path.exists() {
+                anyhow::bail!("Runtime C file not found at {:?}", runtime_c_path);
+            }
+
+            let status = Command::new("clang")
+                .arg("-c")
+                .arg(format!("-O{}", opt_level))
+                .arg("-o")
+                .arg(&runtime_obj)
+                .arg(runtime_c_path)
+                .status()
+                .context("Failed to compile runtime.c")?;
+
+            if !status.success() {
+                anyhow::bail!("Failed to compile runtime.c");
+            }
+
+            if verbose { println!("{}: Step 4 - Linking executable", "substep".yellow()); }
+
+            // Step 4: Link everything together
+            let mut cmd = Command::new("clang");
+            cmd.arg("-o")
+                .arg(&executable_path)
+                .arg(&program_obj)
+                .arg(&runtime_obj)
+                .arg("-lm"); // Math library
+
+            let status = cmd.status().context("Failed to link executable")?;
+
+            if !status.success() {
+                anyhow::bail!("Failed to link executable");
+            }
+
+            // Clean up intermediate files if not keeping them
+            if temp_dir.is_some() {
+                // Files will be automatically cleaned up when temp_dir is dropped
+            } else if !keep_temps {
+                // If we're using the source directory but not keeping temps, clean up manually
+                fs::remove_file(&program_ll).ok();
+                fs::remove_file(&program_obj).ok();
+                fs::remove_file(&runtime_obj).ok();
+            }
+
+            println!("{}: Created executable {:?}", "success".green().bold(), executable_path);
+            if keep_temps {
+                println!("{}: Intermediate files kept in {:?}", "info".blue(), 
+                    input.parent().unwrap_or(Path::new(".")));
             }
         }
-
-        // Link with clang
-        let status = Command::new("clang")
-            .arg("-o")
-            .arg(&exe_path)
-            .arg(&output_path)
-            .arg(&runtime_obj)
-            .arg("-lm") // Link math library
-            .status()
-            .context("Failed to link executable")?;
-
-        if !status.success() {
-            anyhow::bail!("Linking failed");
-        }
-
-        println!(
-            "{}: Created executable {:?}",
-            "success".green().bold(),
-            exe_path
-        );
-    } else {
-        println!("{}: Created {:?}", "success".green().bold(), output_path);
     }
 
     Ok(())
+}
+
+fn inkwell_opt_level(level: u8) -> inkwell::OptimizationLevel {
+    match level {
+        0 => inkwell::OptimizationLevel::None,
+        1 => inkwell::OptimizationLevel::Less,
+        2 => inkwell::OptimizationLevel::Default,
+        3 => inkwell::OptimizationLevel::Aggressive,
+        _ => unreachable!(),
+    }
+}
+
+fn find_llc_command() -> Result<String> {
+    // Try to find llc command in system paths
+    if let Ok(output) = Command::new("which").arg("llc").output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Ok(path);
+            }
+        }
+    }
+
+    // On macOS, try homebrew paths for LLVM 18
+    #[cfg(target_os = "macos")]
+    {
+        let homebrew_paths = [
+            "/opt/homebrew/opt/llvm@18/bin/llc",
+            "/usr/local/opt/llvm@18/bin/llc",  
+            "/opt/homebrew/Cellar/llvm@18/18.1.8/bin/llc",
+            "/opt/homebrew/bin/llc",
+        ];
+        
+        for path in &homebrew_paths {
+            if Path::new(path).exists() {
+                return Ok(path.to_string());
+            }
+        }
+    }
+
+    // Try common Linux paths
+    #[cfg(target_os = "linux")]
+    {
+        let linux_paths = [
+            "/usr/bin/llc-18",
+            "/usr/bin/llc",
+            "/usr/local/bin/llc-18",
+            "/usr/local/bin/llc",
+        ];
+        
+        for path in &linux_paths {
+            if Path::new(path).exists() {
+                return Ok(path.to_string());
+            }
+        }
+    }
+
+    anyhow::bail!("Could not find llc command. Please install LLVM 18 or add llc to your PATH")
 }
 
 fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> Result<()> {
@@ -375,11 +506,12 @@ fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> Result<()> {
     compile(
         input,
         Some(temp_exe.clone()),
-        EmitType::Obj,
+        EmitType::Executable,
         opt_level,
         false,
         false,
-        true,
+        false, // don't keep temps for run
+        false, // not verbose
     )?;
 
     // Run the executable

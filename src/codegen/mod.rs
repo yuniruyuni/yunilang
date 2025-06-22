@@ -8,7 +8,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context as LLVMContext;
 use inkwell::module::{Linkage, Module};
 use inkwell::passes::PassManager;
-use inkwell::targets::{CodeModel, FileType, RelocMode, Target, TargetTriple};
+use inkwell::targets::{CodeModel, FileType, RelocMode, Target, TargetMachine, TargetTriple};
 use inkwell::types::{BasicMetadataTypeEnum, BasicTypeEnum, StructType};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
@@ -276,7 +276,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.context.void_type().fn_type(&param_types, false)
         };
 
-        let linkage = if func.is_public {
+        let linkage = if func.is_public || func.name == "main" {
             Linkage::External
         } else {
             Linkage::Private
@@ -868,24 +868,40 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn value_to_string(&mut self, value: BasicValueEnum<'ctx>) -> Result<BasicValueEnum<'ctx>> {
         match value {
             BasicValueEnum::IntValue(int_val) => {
-                let to_string_fn = self
-                    .runtime_functions
-                    .get("yuni_i64_to_string")
-                    .ok_or_else(|| anyhow::anyhow!("i64 to string function not found"))?;
+                // Check if this is a boolean (i1 type)
+                if int_val.get_type().get_bit_width() == 1 {
+                    let to_string_fn = self
+                        .runtime_functions
+                        .get("yuni_bool_to_string")
+                        .ok_or_else(|| anyhow::anyhow!("bool to string function not found"))?;
 
-                let i64_val = if int_val.get_type().get_bit_width() != 64 {
-                    self.builder
-                        .build_int_s_extend(int_val, self.context.i64_type(), "extend")?
+                    Ok(self
+                        .builder
+                        .build_call(*to_string_fn, &[int_val.into()], "to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow::anyhow!("to_string should return a value"))?)
                 } else {
-                    int_val
-                };
+                    // Integer types
+                    let to_string_fn = self
+                        .runtime_functions
+                        .get("yuni_i64_to_string")
+                        .ok_or_else(|| anyhow::anyhow!("i64 to string function not found"))?;
 
-                Ok(self
-                    .builder
-                    .build_call(*to_string_fn, &[i64_val.into()], "to_string")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow::anyhow!("to_string should return a value"))?)
+                    let i64_val = if int_val.get_type().get_bit_width() != 64 {
+                        self.builder
+                            .build_int_s_extend(int_val, self.context.i64_type(), "extend")?
+                    } else {
+                        int_val
+                    };
+
+                    Ok(self
+                        .builder
+                        .build_call(*to_string_fn, &[i64_val.into()], "to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow::anyhow!("to_string should return a value"))?)
+                }
             }
             BasicValueEnum::FloatValue(float_val) => {
                 let to_string_fn = self
@@ -1098,21 +1114,35 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.builder
                 .build_call(*println_fn, &[empty_str.into()], "println")?;
         } else {
-            // Convert all arguments to strings and concatenate
+            // Convert all arguments to strings and concatenate with spaces
             let mut result: Option<BasicValueEnum> = None;
 
-            for arg in &call.args {
+            for (_i, arg) in call.args.iter().enumerate() {
                 let value = self.compile_expression(arg)?;
                 let str_value = self.value_to_string(value)?;
 
                 result = Some(if let Some(prev) = result {
+                    // Add space before concatenating (except for the first argument)
+                    let space_str = self.compile_string_literal(&StringLit {
+                        value: " ".to_string(),
+                        span: Span::dummy(),
+                    })?;
+
                     let concat_fn = self
                         .runtime_functions
                         .get("yuni_string_concat")
                         .ok_or_else(|| anyhow::anyhow!("String concat function not found"))?;
 
+                    // Concatenate previous result with space
+                    let with_space = self.builder
+                        .build_call(*concat_fn, &[prev.into(), space_str.into()], "concat_space")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow::anyhow!("concat should return a value"))?;
+
+                    // Then concatenate with the current string value
                     self.builder
-                        .build_call(*concat_fn, &[prev.into(), str_value.into()], "concat")?
+                        .build_call(*concat_fn, &[with_space.into(), str_value.into()], "concat")?
                         .try_as_basic_value()
                         .left()
                         .ok_or_else(|| anyhow::anyhow!("concat should return a value"))?
@@ -1549,7 +1579,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Target::initialize_native(&Default::default())
             .map_err(|e| anyhow::anyhow!("Failed to initialize native target: {}", e))?;
 
-        let target_triple = TargetTriple::create("x86_64-apple-darwin");
+        let target_triple = TargetMachine::get_default_triple();
         let target = Target::from_triple(&target_triple)
             .map_err(|e| anyhow::anyhow!("Failed to get target: {}", e))?;
 

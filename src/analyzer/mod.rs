@@ -926,6 +926,16 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_identifier(&self, id: &Identifier) -> AnalysisResult<Type> {
+        // Check for builtin functions
+        if id.name == "println" {
+            // println is a variadic builtin function
+            // We return a special function type that won't be used for normal type checking
+            return Ok(Type::Function(FunctionType {
+                params: vec![], // Empty params to indicate variadic
+                return_type: Box::new(Type::Void),
+            }));
+        }
+
         let symbol = self.current_scope.lookup(&id.name).ok_or_else(|| {
             AnalysisError::UndefinedVariable {
                 name: id.name.clone(),
@@ -1059,6 +1069,18 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_call_expr(&mut self, call: &CallExpr) -> AnalysisResult<Type> {
+        // Check for builtin functions first
+        if let Expression::Identifier(id) = &*call.callee {
+            if id.name == "println" {
+                // println is a builtin that accepts any number of arguments
+                // All arguments are automatically converted to strings
+                for arg in &call.args {
+                    self.analyze_expression(arg)?;
+                }
+                return Ok(Type::Void);
+            }
+        }
+
         // Analyze callee
         let callee_type = self.analyze_expression(&call.callee)?;
 
