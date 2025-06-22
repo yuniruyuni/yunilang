@@ -6,7 +6,7 @@
 
 基本的なパターンマッチング構文は `match` キーワードを使用します：
 
-```yunilang
+```yuni
 match 式 {
     パターン1 => 式1,
     パターン2 => 式2,
@@ -21,7 +21,7 @@ match 式 {
 
 リテラル値に対してマッチします：
 
-```yunilang
+```yuni
 match x {
     0 => "ゼロ",
     1 => "いち",
@@ -34,7 +34,7 @@ match x {
 
 値を変数に束縛します：
 
-```yunilang
+```yuni
 match value {
     x => x * 2  // xは任意の値に束縛される
 }
@@ -44,7 +44,7 @@ match value {
 
 アンダースコア `_` は束縛せずに任意の値にマッチします：
 
-```yunilang
+```yuni
 match value {
     0 => "ゼロ",
     _ => "ゼロ以外"
@@ -55,7 +55,7 @@ match value {
 
 タプルを分解します：
 
-```yunilang
+```yuni
 match point {
     (0, 0) => "原点",
     (x, 0) => "x軸上",
@@ -68,7 +68,7 @@ match point {
 
 様々なパターンでリストにマッチします：
 
-```yunilang
+```yuni
 match list {
     [] => "空",
     [x] => "単一要素: {x}",
@@ -83,7 +83,7 @@ match list {
 
 レコード/構造体を分解します：
 
-```yunilang
+```yuni
 match person {
     { name: "アリス", age } => "アリスは{age}歳です",
     { name, age: 30 } => "{name}は30歳",
@@ -96,7 +96,7 @@ match person {
 
 型に対してマッチします：
 
-```yunilang
+```yuni
 match value {
     n: Int => "整数: {n}",
     s: String => "文字列: {s}",
@@ -109,7 +109,7 @@ match value {
 
 代数的データ型に対してマッチします：
 
-```yunilang
+```yuni
 enum Option<T> {
     Some(T),
     None
@@ -135,7 +135,7 @@ match result {
 
 `if` を使用してパターンに条件を追加します：
 
-```yunilang
+```yuni
 match x {
     n if n > 0 => "正の数",
     n if n < 0 => "負の数",
@@ -147,7 +147,7 @@ match x {
 
 複雑なマッチングのためにパターンをネストできます：
 
-```yunilang
+```yuni
 match data {
     Some((x, y)) if x > y => "x > yのペア",
     Some((x, x)) => "同じ値のペア",
@@ -160,7 +160,7 @@ match data {
 
 `|` で複数のパターンにマッチします：
 
-```yunilang
+```yuni
 match value {
     0 | 1 | 2 => "小",
     3 | 4 | 5 => "中",
@@ -172,7 +172,7 @@ match value {
 
 範囲に対してマッチします：
 
-```yunilang
+```yuni
 match age {
     0..18 => "未成年",
     18..65 => "成人",
@@ -185,7 +185,7 @@ match age {
 
 関数はパラメータで直接パターンマッチできます：
 
-```yunilang
+```yuni
 fn factorial {
     0 => 1,
     n => n * factorial(n - 1)
@@ -201,7 +201,7 @@ fn map {
 
 let束縛で値を分解します：
 
-```yunilang
+```yuni
 let (x, y) = point;
 let { name, age } = person;
 let [first, second | rest] = list;
@@ -211,7 +211,7 @@ let [first, second | rest] = list;
 
 コンパイラはすべての可能なパターンがカバーされていることを保証します：
 
-```yunilang
+```yuni
 // Colorにより多くのバリアントがある場合、コンパイルエラーになる
 match color {
     Red => "#FF0000",
@@ -225,7 +225,7 @@ match color {
 
 ### ツリー走査
 
-```yunilang
+```yuni
 enum Tree<T> {
     Leaf(T),
     Node(Tree<T>, T, Tree<T>)
@@ -239,7 +239,7 @@ fn sum_tree {
 
 ### Option処理
 
-```yunilang
+```yuni
 fn safe_divide(x, y) {
     match y {
         0 => None,
@@ -257,7 +257,7 @@ fn process_result(opt) {
 
 ### ステートマシン
 
-```yunilang
+```yuni
 enum State {
     Initial,
     Processing(Int),
@@ -292,7 +292,7 @@ fn transition(state, event) {
 - 代数的データ型を扱う場合
 - コンパイル時の網羅性チェックが必要な場合
 
-```yunilang
+```yuni
 // パターンマッチングを推奨
 match option {
     Some(x) if x > 0 => positive_action(x),
