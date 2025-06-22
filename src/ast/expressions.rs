@@ -29,6 +29,8 @@ pub enum Expression {
     Cast(CastExpr),
     Assignment(AssignmentExpr),
     Match(MatchExpr),
+    If(IfExpr),
+    Block(BlockExpr),
 }
 
 /// 整数リテラル
@@ -264,4 +266,20 @@ pub struct MatchArm {
     pub pattern: Pattern,
     pub guard: Option<Expression>,
     pub expr: Expression,
+}
+
+/// if式
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IfExpr {
+    pub condition: Box<Expression>,
+    pub then_branch: Box<Expression>,
+    pub else_branch: Option<Box<Expression>>,
+    pub span: Span,
+}
+
+/// ブロック式
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BlockExpr {
+    pub block: super::statements::Block,
+    pub span: Span,
 }

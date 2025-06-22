@@ -31,7 +31,12 @@ impl Parser {
                         span,
                     }))
                 } else {
-                    self.expect(Token::Semicolon)?;
+                    // セミコロンがあるか、次がブロック終了なら省略可能
+                    if self.check(&Token::Semicolon) {
+                        self.advance();
+                    } else if !self.check(&Token::RightBrace) {
+                        return Err(self.error("Expected semicolon".to_string()));
+                    }
                     Ok(Statement::Expression(expr))
                 }
             }
@@ -204,7 +209,8 @@ impl Parser {
         let mut statements = Vec::new();
 
         while !self.check(&Token::RightBrace) && !self.is_at_end() {
-            statements.push(self.parse_statement_internal()?);
+            let stmt = self.parse_statement_internal()?;
+            statements.push(stmt);
         }
 
         self.expect(Token::RightBrace)?;

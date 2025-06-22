@@ -34,6 +34,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Cast(cast) => self.compile_cast_expr(cast),
             Expression::Assignment(assign) => self.compile_assignment_expr(assign),
             Expression::Match(match_expr) => self.compile_match_expr(match_expr),
+            Expression::If(if_expr) => self.compile_if_expr(if_expr),
+            Expression::Block(block_expr) => self.compile_block_expr(block_expr),
         }
     }
 
@@ -390,6 +392,24 @@ impl<'ctx> CodeGenerator<'ctx> {
         Err(YuniError::Codegen(CodegenError::Unimplemented {
             feature: "Match expressions not yet implemented".to_string(),
             span: match_expr.span,
+        }))
+    }
+
+    /// if式をコンパイル
+    pub fn compile_if_expr(&mut self, if_expr: &IfExpr) -> YuniResult<BasicValueEnum<'ctx>> {
+        // TODO: 実装
+        Err(YuniError::Codegen(CodegenError::Unimplemented {
+            feature: "If expressions not yet implemented".to_string(),
+            span: if_expr.span,
+        }))
+    }
+
+    /// ブロック式をコンパイル
+    pub fn compile_block_expr(&mut self, block_expr: &BlockExpr) -> YuniResult<BasicValueEnum<'ctx>> {
+        // TODO: 実装
+        Err(YuniError::Codegen(CodegenError::Unimplemented {
+            feature: "Block expressions not yet implemented".to_string(),
+            span: block_expr.span,
         }))
     }
 

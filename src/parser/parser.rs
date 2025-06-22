@@ -90,7 +90,14 @@ impl Parser {
 
     /// 開始位置から現在位置までのスパンを作成
     pub(super) fn span_from(&self, start: usize) -> Span {
-        let end = self.current_span().end;
+        let end = if self.current > 0 {
+            // 前のトークンの終了位置を使用
+            self.tokens.get(self.current - 1)
+                .map(|t| t.span.end)
+                .unwrap_or(start)
+        } else {
+            self.current_span().end
+        };
         Span::new(start, end)
     }
 

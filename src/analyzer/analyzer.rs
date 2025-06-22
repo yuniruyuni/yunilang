@@ -531,6 +531,8 @@ impl SemanticAnalyzer {
             Expression::Match(match_expr) => self.analyze_match_expression(match_expr),
             Expression::EnumVariant(enum_variant) => self.analyze_enum_variant_expression(enum_variant),
             Expression::MethodCall(method_call) => self.analyze_method_call_expression(method_call),
+            Expression::If(if_expr) => self.analyze_if_expression(if_expr),
+            Expression::Block(block_expr) => self.analyze_block_expression(block_expr),
             _ => {
                 // 他の式の型は一旦デフォルト値を返す
                 Ok(Type::Void)
@@ -741,6 +743,8 @@ impl SemanticAnalyzer {
             Expression::Cast(c) => c.span,
             Expression::Assignment(a) => a.span,
             Expression::Match(m) => m.span,
+            Expression::If(i) => i.span,
+            Expression::Block(b) => b.span,
         }
     }
     
@@ -957,5 +961,57 @@ impl SemanticAnalyzer {
         }
     }
     
+    /// if式の解析
+    fn analyze_if_expression(&mut self, if_expr: &IfExpr) -> AnalysisResult<Type> {
+        // 条件式の型チェック
+        let condition_type = self.analyze_expression(&if_expr.condition)?;
+        if !matches!(condition_type, Type::Bool) {
+            return Err(AnalysisError::TypeMismatch {
+                expected: "bool".to_string(),
+                found: format!("{:?}", condition_type),
+                span: if_expr.span,
+            });
+        }
+
+        // then ブランチの型を取得
+        let then_type = self.analyze_expression(&if_expr.then_branch)?;
+
+        // else ブランチがある場合はその型もチェック
+        if let Some(else_branch) = &if_expr.else_branch {
+            let else_type = self.analyze_expression(else_branch)?;
+            
+            // then と else の型が一致する必要がある
+            self.type_checker.check_type_compatibility(&then_type, &else_type, if_expr.span)?;
+            Ok(then_type)
+        } else {
+            // else節がない場合、if式の値はunit型
+            Ok(Type::Void)
+        }
+    }
+
+    /// ブロック式の解析
+    fn analyze_block_expression(&mut self, block_expr: &BlockExpr) -> AnalysisResult<Type> {
+        // 新しいスコープを作成
+        self.scope_stack.push(Scope::new());
+
+        let mut last_type = Type::Void;
+
+        // ブロック内の文を順番に解析
+        for stmt in &block_expr.block.statements {
+            match stmt {
+                Statement::Expression(expr) => {
+                    last_type = self.analyze_expression(expr)?;
+                }
+                _ => {
+                    self.analyze_statement(stmt)?;
+                    last_type = Type::Void;
+                }
+            }
+        }
+
+        self.scope_stack.pop();
+        Ok(last_type)
+    }
+
     // TODO: 残りのanalyze_*メソッドの実装
 }

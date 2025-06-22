@@ -455,8 +455,8 @@ mod tests {
                     if let Expression::Call(ref call) = expr {
                         // call.calleeがprintln関数を指すことを確認
                         match i {
-                            0 => assert_eq!(call.args.len(), 1),  // println("hello")
-                            1 => assert_eq!(call.args.len(), 1),  // println(...)
+                            0 => assert_eq!(call.args.len(), 0),  // println()
+                            1 => assert_eq!(call.args.len(), 1),  // println("hello")
                             2 => assert_eq!(call.args.len(), 4),  // println("x =", x, "y =", y)
                             _ => {}
                         }

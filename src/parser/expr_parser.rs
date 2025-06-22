@@ -506,6 +506,9 @@ impl Parser {
             Some(Token::Match) => {
                 self.parse_match_expression()
             }
+            Some(Token::If) => {
+                self.parse_if_expression()
+            }
             _ => Err(self.error("Expected expression".to_string())),
         }
     }
@@ -611,5 +614,96 @@ impl Parser {
         
         // 通常のパス式として扱う
         Ok(Expression::Path(PathExpr { segments, span }))
+    }
+
+    /// if式を解析
+    fn parse_if_expression(&mut self) -> ParseResult<Expression> {
+        let start = self.current_span().start;
+        self.expect(Token::If)?;
+
+        let condition = self.parse_expression_internal()?;
+        
+        // if式の条件式の後は必ずブロックが来るため、{を明示的にチェック
+        if !self.check(&Token::LeftBrace) {
+            return Err(self.error("Expected '{' after if condition".to_string()));
+        }
+        let then_branch = self.parse_block()?;
+
+        let else_branch = if self.match_token(&Token::Else) {
+            if self.check(&Token::If) {
+                // else if の場合、再帰的にif式を解析
+                Some(Box::new(self.parse_if_expression()?))
+            } else {
+                // else ブロックの場合
+                let else_block = self.parse_block()?;
+                // ブロックを式として扱うために、Block式が必要
+                let span = else_block.span;
+                Some(Box::new(Expression::Block(BlockExpr {
+                    block: else_block,
+                    span,
+                })))
+            }
+        } else {
+            None
+        };
+
+        let span = self.span_from(start);
+        
+        // then_branchをBlock式として扱う
+        let then_span = then_branch.span;
+        let then_expr = Expression::Block(BlockExpr {
+            block: then_branch,
+            span: then_span,
+        });
+
+        Ok(Expression::If(IfExpr {
+            condition: Box::new(condition),
+            then_branch: Box::new(then_expr),
+            else_branch,
+            span,
+        }))
+    }
+
+    /// match式を解析
+    fn parse_match_expression(&mut self) -> ParseResult<Expression> {
+        let start = self.current_span().start;
+        self.expect(Token::Match)?;
+        
+        let expr = self.parse_expression_internal()?;
+        self.expect(Token::LeftBrace)?;
+        
+        let mut arms = Vec::new();
+        
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            let pattern = self.parse_pattern(false)?; // false = not mutable pattern
+            
+            let guard = if self.match_token(&Token::If) {
+                Some(self.parse_expression_internal()?)
+            } else {
+                None
+            };
+            
+            self.expect(Token::FatArrow)?;
+            let expr = self.parse_expression_internal()?;
+            
+            arms.push(MatchArm {
+                pattern,
+                guard,
+                expr,
+            });
+            
+            if !self.check(&Token::RightBrace) {
+                self.expect(Token::Comma)?;
+            }
+        }
+        
+        self.expect(Token::RightBrace)?;
+        let span = self.span_from(start);
+        
+        Ok(Expression::Match(MatchExpr {
+            expr: Box::new(expr),
+            arms,
+            span,
+        }))
     }
 }
