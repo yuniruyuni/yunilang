@@ -4,39 +4,11 @@
 //! It uses a recursive descent approach with proper precedence handling.
 
 use crate::ast::*;
+use crate::error::{ParserError, YuniError, YuniResult};
 use crate::lexer::{Token, TokenWithPosition};
-use thiserror::Error;
 
-#[derive(Error, Debug, Clone)]
-pub enum ParseError {
-    #[error(
-        "Unexpected token: expected {expected}, found {found} at line {line}, column {column}"
-    )]
-    UnexpectedToken {
-        expected: String,
-        found: String,
-        line: usize,
-        column: usize,
-    },
-
-    #[error("Unexpected end of input")]
-    UnexpectedEof,
-
-    #[error("Invalid syntax at line {line}, column {column}: {message}")]
-    InvalidSyntax {
-        line: usize,
-        column: usize,
-        message: String,
-    },
-
-    #[error("Invalid number literal at line {line}, column {column}: {message}")]
-    InvalidNumber {
-        line: usize,
-        column: usize,
-        message: String,
-    },
-}
-
+// 既存のParseError型を互換性のために残す（段階的な移行のため）
+pub type ParseError = ParserError;
 pub type ParseResult<T> = Result<T, ParseError>;
 
 /// Parser for the Yuni language
@@ -186,11 +158,13 @@ impl Parser {
                 Err(ParseError::UnexpectedToken {
                     expected: format!("{:?}", expected),
                     found: format!("{:?}", token),
-                    line: pos.position.line,
-                    column: pos.position.column,
+                    span: pos.span.clone().into(),
                 })
             }
-            None => Err(ParseError::UnexpectedEof),
+            None => Err(ParseError::UnexpectedEof {
+                expected: format!("{:?}", expected),
+                span: self.current_span().into(),
+            }),
         }
     }
 
@@ -207,11 +181,13 @@ impl Parser {
                 Err(ParseError::UnexpectedToken {
                     expected: "identifier".to_string(),
                     found: format!("{:?}", token),
-                    line: pos.position.line,
-                    column: pos.position.column,
+                    span: pos.span.clone().into(),
                 })
             }
-            None => Err(ParseError::UnexpectedEof),
+            None => Err(ParseError::UnexpectedEof {
+                expected: "identifier".to_string(),
+                span: self.current_span().into(),
+            }),
         }
     }
 
@@ -219,12 +195,14 @@ impl Parser {
     fn error(&self, message: String) -> ParseError {
         if let Some(pos) = self.current_token_with_pos() {
             ParseError::InvalidSyntax {
-                line: pos.position.line,
-                column: pos.position.column,
                 message,
+                span: pos.span.clone().into(),
             }
         } else {
-            ParseError::UnexpectedEof
+            ParseError::UnexpectedEof {
+                expected: "token".to_string(),
+                span: Span::new(0, 0),
+            }
         }
     }
 

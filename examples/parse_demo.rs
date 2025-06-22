@@ -1,17 +1,7 @@
 //! Demonstrates parsing Yuni language code without LLVM dependencies
 
-// This allows us to use the parser without needing LLVM installed
-#[path = "../src/ast/mod.rs"]
-mod ast;
-
-#[path = "../src/lexer/mod.rs"]
-mod lexer;
-
-#[path = "../src/parser/mod.rs"]
-mod parser;
-
-use lexer::Lexer;
-use parser::Parser;
+use yunilang::lexer::Lexer;
+use yunilang::parser::Parser;
 
 fn main() {
     let examples = vec![

@@ -4,71 +4,12 @@
 //! and other semantic validations.
 
 use crate::ast::*;
+use crate::error::{AnalyzerError, ErrorCollector, YuniError, YuniResult};
 use std::collections::{HashMap, HashSet};
-use thiserror::Error;
 
-#[derive(Error, Debug, Clone)]
-pub enum AnalysisError {
-    #[error("Undefined variable: {name} at {span:?}")]
-    UndefinedVariable { name: String, span: Span },
+// 既存のAnalysisError型を互換性のために残す
+pub type AnalysisError = AnalyzerError;
 
-    #[error("Undefined type: {name} at {span:?}")]
-    UndefinedType { name: String, span: Span },
-
-    #[error("Undefined function: {name} at {span:?}")]
-    UndefinedFunction { name: String, span: Span },
-
-    #[error("Type mismatch: expected {expected}, found {found} at {span:?}")]
-    TypeMismatch {
-        expected: String,
-        found: String,
-        span: Span,
-    },
-
-    #[error("Function {name} already defined at {span:?}")]
-    DuplicateFunction { name: String, span: Span },
-
-    #[error("Type {name} already defined at {span:?}")]
-    DuplicateType { name: String, span: Span },
-
-    #[error("Variable {name} already defined in this scope at {span:?}")]
-    DuplicateVariable { name: String, span: Span },
-
-    #[error("Cannot infer type for {name} at {span:?}")]
-    TypeInferenceError { name: String, span: Span },
-
-    #[error("Invalid operation: {message} at {span:?}")]
-    InvalidOperation { message: String, span: Span },
-
-    #[error("Cannot mutate immutable variable {name} at {span:?}")]
-    ImmutableVariable { name: String, span: Span },
-
-    #[error("Missing return statement in function {name} at {span:?}")]
-    MissingReturn { name: String, span: Span },
-
-    #[error("Lifetime constraint violation: {message} at {span:?}")]
-    LifetimeError { message: String, span: Span },
-
-    #[error("Wrong number of arguments: expected {expected}, found {found} at {span:?}")]
-    ArgumentCountMismatch {
-        expected: usize,
-        found: usize,
-        span: Span,
-    },
-
-    #[error("Method {method} not found for type {ty} at {span:?}")]
-    MethodNotFound {
-        method: String,
-        ty: String,
-        span: Span,
-    },
-
-    #[error("Cannot take reference of temporary value at {span:?}")]
-    TemporaryReference { span: Span },
-
-    #[error("Pattern matching not exhaustive at {span:?}")]
-    NonExhaustivePattern { span: Span },
-}
 
 pub type AnalysisResult<T> = Result<T, AnalysisError>;
 
@@ -79,6 +20,12 @@ pub struct Symbol {
     pub ty: Type,
     pub is_mutable: bool,
     pub span: Span,
+    /// 変数が借用されているかどうか
+    pub borrow_info: Option<BorrowInfo>,
+    /// 変数が移動されたかどうか
+    pub is_moved: bool,
+    /// 変数のライフタイム（参照の場合）
+    pub lifetime: Option<LifetimeId>,
 }
 
 /// Function signature information
@@ -157,55 +104,411 @@ impl Scope {
                 .and_then(|parent| parent._lookup_mut(name))
         }
     }
+    
+    /// 変数を移動済みとしてマーク
+    fn mark_moved(&mut self, name: &str) -> bool {
+        if let Some(symbol) = self.symbols.get_mut(name) {
+            symbol.is_moved = true;
+            true
+        } else if let Some(parent) = &mut self.parent {
+            parent.mark_moved(name)
+        } else {
+            false
+        }
+    }
+    
+    /// 変数の借用情報を更新
+    fn update_borrow_info(&mut self, name: &str, borrow_info: BorrowInfo) -> bool {
+        if let Some(symbol) = self.symbols.get_mut(name) {
+            symbol.borrow_info = Some(borrow_info);
+            true
+        } else if let Some(parent) = &mut self.parent {
+            parent.update_borrow_info(name, borrow_info)
+        } else {
+            false
+        }
+    }
 }
 
-/// Lifetime information for a reference
+/// ライフタイム識別子の種類
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LifetimeId {
+    /// 名前付きライフタイム（'a, 'bなど）
+    Named(String),
+    /// 無名ライフタイム（自動生成）
+    Anonymous(usize),
+    /// 静的ライフタイム（'static）
+    Static,
+    /// 不明なライフタイム（推論中）
+    Unknown,
+}
+
+/// ライフタイムの情報
 #[derive(Debug, Clone)]
-struct _Lifetime {
-    _name: String,
-    _outlives: HashSet<String>,
+struct Lifetime {
+    /// ライフタイムID
+    id: LifetimeId,
+    /// このライフタイムが依存するライフタイム（このライフタイムより長く生きる必要がある）
+    outlives: HashSet<LifetimeId>,
+    /// このライフタイムのスコープ開始位置
+    start_scope: ScopeId,
+    /// このライフタイムのスコープ終了位置
+    end_scope: Option<ScopeId>,
+    /// ライフタイムが定義された場所
+    span: Span,
 }
 
-/// Context for lifetime analysis
+/// スコープID（ネストしたスコープを管理）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct ScopeId(usize);
+
+/// 変数の借用情報
+#[derive(Debug, Clone)]
+struct BorrowInfo {
+    /// 借用の種類
+    kind: BorrowKind,
+    /// 借用されているライフタイム
+    lifetime: LifetimeId,
+    /// 借用が発生した場所
+    span: Span,
+}
+
+/// 借用の種類
+#[derive(Debug, Clone, PartialEq)]
+enum BorrowKind {
+    /// 不変借用
+    Immutable,
+    /// 可変借用
+    Mutable,
+    /// 所有権の移動
+    Move,
+}
+
+/// 変数の使用情報
+#[derive(Debug, Clone)]
+struct VariableUsage {
+    /// 使用の種類
+    usage_kind: UsageKind,
+    /// 使用された場所
+    span: Span,
+    /// 使用されたスコープ
+    scope: ScopeId,
+}
+
+/// 変数の使用種類
+#[derive(Debug, Clone, PartialEq)]
+enum UsageKind {
+    /// 読み取り
+    Read,
+    /// 書き込み
+    Write,
+    /// 借用
+    Borrow(BorrowKind),
+    /// 移動
+    Move,
+}
+
+/// ライフタイム分析のコンテキスト
 #[derive(Debug)]
 struct LifetimeContext {
-    _lifetimes: HashMap<String, _Lifetime>,
+    /// 全てのライフタイム
+    lifetimes: HashMap<LifetimeId, Lifetime>,
+    /// ライフタイム制約
     constraints: Vec<LivesConstraint>,
+    /// 現在のスコープID
+    current_scope: ScopeId,
+    /// スコープの階層構造（parent scope mapping）
+    scope_hierarchy: HashMap<ScopeId, Option<ScopeId>>,
+    /// 次のスコープID
+    next_scope_id: usize,
+    /// 次の無名ライフタイムID
+    next_anonymous_id: usize,
+    /// 変数の借用情報
+    variable_borrows: HashMap<String, Vec<BorrowInfo>>,
+    /// 変数の使用履歴
+    variable_usage: HashMap<String, Vec<VariableUsage>>,
 }
 
 impl LifetimeContext {
     fn new() -> Self {
-        Self {
-            _lifetimes: HashMap::new(),
+        let mut ctx = Self {
+            lifetimes: HashMap::new(),
             constraints: Vec::new(),
+            current_scope: ScopeId(0),
+            scope_hierarchy: HashMap::new(),
+            next_scope_id: 1,
+            next_anonymous_id: 0,
+            variable_borrows: HashMap::new(),
+            variable_usage: HashMap::new(),
+        };
+        
+        // 静的ライフタイムを登録
+        ctx.register_static_lifetime();
+        
+        ctx
+    }
+    
+    /// 静的ライフタイムを登録
+    fn register_static_lifetime(&mut self) {
+        let static_lifetime = Lifetime {
+            id: LifetimeId::Static,
+            outlives: HashSet::new(),
+            start_scope: ScopeId(0),
+            end_scope: None, // 静的ライフタイムは終了しない
+            span: Span::dummy(),
+        };
+        self.lifetimes.insert(LifetimeId::Static, static_lifetime);
+    }
+    
+    /// 新しいスコープを開始
+    fn enter_scope(&mut self) -> ScopeId {
+        let new_scope = ScopeId(self.next_scope_id);
+        self.next_scope_id += 1;
+        
+        // 親スコープを記録
+        self.scope_hierarchy.insert(new_scope, Some(self.current_scope));
+        self.current_scope = new_scope;
+        
+        new_scope
+    }
+    
+    /// スコープを終了
+    fn exit_scope(&mut self) {
+        if let Some(parent) = self.scope_hierarchy.get(&self.current_scope).cloned().flatten() {
+            self.current_scope = parent;
         }
     }
-
+    
+    /// 新しい無名ライフタイムを生成
+    fn create_anonymous_lifetime(&mut self, span: Span) -> LifetimeId {
+        let id = LifetimeId::Anonymous(self.next_anonymous_id);
+        self.next_anonymous_id += 1;
+        
+        let lifetime = Lifetime {
+            id: id.clone(),
+            outlives: HashSet::new(),
+            start_scope: self.current_scope,
+            end_scope: None,
+            span,
+        };
+        
+        self.lifetimes.insert(id.clone(), lifetime);
+        id
+    }
+    
+    /// 名前付きライフタイムを登録
+    fn register_named_lifetime(&mut self, name: String, span: Span) -> AnalysisResult<LifetimeId> {
+        let id = LifetimeId::Named(name.clone());
+        
+        if self.lifetimes.contains_key(&id) {
+            return Err(AnalysisError::LifetimeError {
+                message: format!("ライフタイム '{}' は既に定義されています", name),
+                span,
+            });
+        }
+        
+        let lifetime = Lifetime {
+            id: id.clone(),
+            outlives: HashSet::new(),
+            start_scope: self.current_scope,
+            end_scope: None,
+            span,
+        };
+        
+        self.lifetimes.insert(id.clone(), lifetime);
+        Ok(id)
+    }
+    
+    /// ライフタイム制約を追加
     fn add_constraint(&mut self, constraint: LivesConstraint) {
         self.constraints.push(constraint);
     }
-
+    
+    /// ライフタイムの依存関係を追加（'a: 'b means 'a outlives 'b）
+    fn add_outlives_constraint(&mut self, longer: LifetimeId, shorter: LifetimeId) {
+        if let Some(lifetime) = self.lifetimes.get_mut(&shorter) {
+            lifetime.outlives.insert(longer);
+        }
+    }
+    
+    /// 変数の借用を記録
+    fn record_borrow(&mut self, var_name: String, kind: BorrowKind, lifetime: LifetimeId, span: Span) {
+        let borrow_info = BorrowInfo {
+            kind,
+            lifetime,
+            span,
+        };
+        
+        self.variable_borrows.entry(var_name).or_insert_with(Vec::new).push(borrow_info);
+    }
+    
+    /// 変数の使用を記録
+    fn record_usage(&mut self, var_name: String, usage_kind: UsageKind, span: Span) {
+        let usage = VariableUsage {
+            usage_kind,
+            span,
+            scope: self.current_scope,
+        };
+        
+        self.variable_usage.entry(var_name).or_insert_with(Vec::new).push(usage);
+    }
+    
+    /// 借用の競合をチェック
+    fn check_borrow_conflicts(&self, var_name: &str) -> AnalysisResult<()> {
+        if let Some(borrows) = self.variable_borrows.get(var_name) {
+            // 可変借用と他の借用が同時に存在しないかチェック
+            let mut mutable_borrows = Vec::new();
+            let mut immutable_borrows = Vec::new();
+            
+            for borrow in borrows {
+                match borrow.kind {
+                    BorrowKind::Mutable => mutable_borrows.push(borrow),
+                    BorrowKind::Immutable => immutable_borrows.push(borrow),
+                    BorrowKind::Move => {} // 移動は別途チェック
+                }
+            }
+            
+            // 可変借用は他の借用と同時に存在できない
+            if mutable_borrows.len() > 1 {
+                let first_mut = &mutable_borrows[0];
+                return Err(AnalysisError::MultipleMutableBorrows {
+                    name: var_name.to_string(),
+                    span: first_mut.span,
+                });
+            } else if !mutable_borrows.is_empty() && !immutable_borrows.is_empty() {
+                let first_mut = &mutable_borrows[0];
+                return Err(AnalysisError::MutableBorrowConflict {
+                    name: var_name.to_string(),
+                    span: first_mut.span,
+                });
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// ライフタイム制約の検証を実行
     fn validate(&self) -> AnalysisResult<()> {
-        // TODO: Implement full lifetime validation
-        // For now, we'll do basic checks
+        // 1. 全ての参照されるライフタイムが存在することを確認
         for constraint in &self.constraints {
-            // Check that all referenced lifetimes exist
-            if !self._lifetimes.contains_key(&constraint.target) {
+            let target_id = LifetimeId::Named(constraint.target.clone());
+            if !self.lifetimes.contains_key(&target_id) {
                 return Err(AnalysisError::LifetimeError {
-                    message: format!("Unknown lifetime: {}", constraint.target),
+                    message: format!("未定義のライフタイム: '{}'", constraint.target),
                     span: constraint.span,
                 });
             }
+            
             for source in &constraint.sources {
-                if !self._lifetimes.contains_key(source) {
+                let source_id = LifetimeId::Named(source.clone());
+                if !self.lifetimes.contains_key(&source_id) {
                     return Err(AnalysisError::LifetimeError {
-                        message: format!("Unknown lifetime: {}", source),
+                        message: format!("未定義のライフタイム: '{}'", source),
                         span: constraint.span,
                     });
                 }
             }
         }
+        
+        // 2. ライフタイムの循環依存をチェック
+        self.check_lifetime_cycles()?;
+        
+        // 3. 全ての変数に対して借用の競合をチェック
+        for var_name in self.variable_borrows.keys() {
+            self.check_borrow_conflicts(var_name)?;
+        }
+        
+        // 4. ライフタイムの依存関係が満たされているかチェック
+        self.validate_lifetime_dependencies()?;
+        
         Ok(())
+    }
+    
+    /// ライフタイムの循環依存をチェック
+    fn check_lifetime_cycles(&self) -> AnalysisResult<()> {
+        let mut visited = HashSet::new();
+        let mut recursion_stack = HashSet::new();
+        
+        for lifetime_id in self.lifetimes.keys() {
+            if !visited.contains(lifetime_id) {
+                self.check_cycle_dfs(lifetime_id, &mut visited, &mut recursion_stack)?;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// DFSによる循環検出
+    fn check_cycle_dfs(
+        &self,
+        current: &LifetimeId,
+        visited: &mut HashSet<LifetimeId>,
+        recursion_stack: &mut HashSet<LifetimeId>,
+    ) -> AnalysisResult<()> {
+        visited.insert(current.clone());
+        recursion_stack.insert(current.clone());
+        
+        if let Some(lifetime) = self.lifetimes.get(current) {
+            for dependency in &lifetime.outlives {
+                if !visited.contains(dependency) {
+                    self.check_cycle_dfs(dependency, visited, recursion_stack)?;
+                } else if recursion_stack.contains(dependency) {
+                    return Err(AnalysisError::LifetimeError {
+                        message: format!(
+                            "ライフタイムの循環依存が検出されました: {:?} -> {:?}",
+                            current, dependency
+                        ),
+                        span: lifetime.span,
+                    });
+                }
+            }
+        }
+        
+        recursion_stack.remove(current);
+        Ok(())
+    }
+    
+    /// ライフタイムの依存関係の検証
+    fn validate_lifetime_dependencies(&self) -> AnalysisResult<()> {
+        for (lifetime_id, lifetime) in &self.lifetimes {
+            for dependency in &lifetime.outlives {
+                if !self.lifetime_outlives(dependency, lifetime_id) {
+                    return Err(AnalysisError::LifetimeError {
+                        message: format!(
+                            "ライフタイム制約違反: {:?} は {:?} より長く生きる必要があります",
+                            dependency, lifetime_id
+                        ),
+                        span: lifetime.span,
+                    });
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// ライフタイムAがライフタイムBより長く生きるかチェック
+    fn lifetime_outlives(&self, a: &LifetimeId, b: &LifetimeId) -> bool {
+        // 静的ライフタイムは全てより長い
+        if a == &LifetimeId::Static {
+            return true;
+        }
+        
+        // 同じライフタイムなら満たされる
+        if a == b {
+            return true;
+        }
+        
+        // スコープベースの比較（簡単な実装）
+        if let (Some(lifetime_a), Some(lifetime_b)) = (
+            self.lifetimes.get(a),
+            self.lifetimes.get(b),
+        ) {
+            // より外側のスコープ（小さいID）が長く生きる
+            return lifetime_a.start_scope.0 <= lifetime_b.start_scope.0;
+        }
+        
+        false
     }
 }
 
@@ -498,6 +801,9 @@ impl SemanticAnalyzer {
                 ty: param.ty.clone(),
                 is_mutable: false,
                 span: param.span,
+                borrow_info: None,
+                is_moved: false,
+                lifetime: None,
             };
             self.current_scope.define(symbol)?;
         }
@@ -544,6 +850,9 @@ impl SemanticAnalyzer {
             ty: method.receiver.ty.clone(),
             is_mutable: matches!(&method.receiver.ty, Type::Reference(_, true)),
             span: method.receiver.span,
+            borrow_info: None,
+            is_moved: false,
+            lifetime: None,
         };
         self.current_scope.define(receiver_symbol)?;
 
@@ -554,6 +863,9 @@ impl SemanticAnalyzer {
                 ty: param.ty.clone(),
                 is_mutable: false,
                 span: param.span,
+                borrow_info: None,
+                is_moved: false,
+                lifetime: None,
             };
             self.current_scope.define(symbol)?;
         }
@@ -640,7 +952,16 @@ impl SemanticAnalyzer {
     fn analyze_let_statement(&mut self, let_stmt: &LetStatement) -> AnalysisResult<()> {
         // Analyze initializer expression if present
         let init_type = if let Some(init) = &let_stmt.init {
-            Some(self.analyze_expression(init)?)
+            let ty = self.analyze_expression(init)?;
+            
+            // 初期化での移動セマンティクスをチェック
+            if let Expression::Identifier(id) = init {
+                if !self.is_copy_type(&ty) {
+                    self.check_move_semantics(&id.name, id.span)?;
+                }
+            }
+            
+            Some(ty)
         } else {
             None
         };
@@ -672,6 +993,9 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_assignment(&mut self, assign_stmt: &AssignStatement) -> AnalysisResult<()> {
+        // 借用チェックを実行
+        self.check_assignment_borrow(&assign_stmt.target, &assign_stmt.value, assign_stmt.span)?;
+        
         // Check that target is assignable (mutable)
         let target_type = self.analyze_assignable_expression(&assign_stmt.target)?;
 
@@ -925,7 +1249,7 @@ impl SemanticAnalyzer {
         Ok(Type::String)
     }
 
-    fn analyze_identifier(&self, id: &Identifier) -> AnalysisResult<Type> {
+    fn analyze_identifier(&mut self, id: &Identifier) -> AnalysisResult<Type> {
         // Check for builtin functions
         if id.name == "println" {
             // println is a variadic builtin function
@@ -936,16 +1260,31 @@ impl SemanticAnalyzer {
             }));
         }
 
-        let symbol = self.current_scope.lookup(&id.name).ok_or_else(|| {
-            AnalysisError::UndefinedVariable {
-                name: id.name.clone(),
+        let (symbol_type, is_moved) = {
+            let symbol = self.current_scope.lookup(&id.name).ok_or_else(|| {
+                AnalysisError::UndefinedVariable {
+                    name: id.name.clone(),
+                    span: id.span,
+                }
+            })?;
+            (symbol.ty.clone(), symbol.is_moved)
+        };
+        
+        // 変数の読み取り使用を記録
+        self.record_variable_usage(&id.name, UsageKind::Read, id.span);
+        
+        // 移動されていないかチェック
+        if is_moved {
+            return Err(AnalysisError::LifetimeError {
+                message: format!("変数 '{}' は既に移動されているため使用できません", id.name),
                 span: id.span,
-            }
-        })?;
-        Ok(symbol.ty.clone())
+            });
+        }
+        
+        Ok(symbol_type)
     }
 
-    fn analyze_path(&self, path: &PathExpr) -> AnalysisResult<Type> {
+    fn analyze_path(&mut self, path: &PathExpr) -> AnalysisResult<Type> {
         // For now, we'll treat paths as function references
         // TODO: Support module paths, type paths, etc.
         if path.segments.len() == 1 {
@@ -1103,6 +1442,14 @@ impl SemanticAnalyzer {
                     let arg_type = self.auto_ref(&arg_type, param_type);
 
                     self.check_type_compatibility(param_type, &arg_type, call.span)?;
+                    
+                    // 引数が値で渡される場合、移動をチェック
+                    if !matches!(param_type, Type::Reference(_, _)) {
+                        if let Expression::Identifier(id) = arg {
+                            // 値渡しの場合、変数が移動される
+                            self.check_move_semantics(&id.name, id.span)?;
+                        }
+                    }
                 }
 
                 Ok(*func_type.return_type)
@@ -1214,7 +1561,32 @@ impl SemanticAnalyzer {
 
         // Check if we can take a reference
         match &*ref_expr.expr {
-            Expression::Identifier(_) | Expression::Field(_) | Expression::Index(_) => {
+            Expression::Identifier(id) => {
+                // 借用可能性をチェック
+                self.check_borrowability(&id.name, ref_expr.is_mut, ref_expr.span)?;
+                
+                // 新しいライフタイムを作成
+                let lifetime = self.lifetime_context.create_anonymous_lifetime(ref_expr.span);
+                
+                // 借用を記録
+                let borrow_kind = if ref_expr.is_mut {
+                    BorrowKind::Mutable
+                } else {
+                    BorrowKind::Immutable
+                };
+                
+                self.lifetime_context.record_borrow(
+                    id.name.clone(),
+                    borrow_kind,
+                    lifetime.clone(),
+                    ref_expr.span,
+                );
+                
+                Ok(Type::Reference(Box::new(inner_type), ref_expr.is_mut))
+            }
+            Expression::Field(_) | Expression::Index(_) => {
+                // フィールドアクセスやインデックスアクセスの借用
+                // より詳細な実装が必要だが、基本的な形を提供
                 Ok(Type::Reference(Box::new(inner_type), ref_expr.is_mut))
             }
             _ => Err(AnalysisError::TemporaryReference {
@@ -1424,6 +1796,9 @@ impl SemanticAnalyzer {
                     ty: ty.clone(),
                     is_mutable: *is_mut,
                     span,
+                    borrow_info: None,
+                    is_moved: false,
+                    lifetime: None,
                 };
                 self.current_scope.define(symbol)?;
             }
@@ -1702,12 +2077,166 @@ impl SemanticAnalyzer {
         let new_scope =
             Scope::with_parent(std::mem::replace(&mut self.current_scope, Scope::new()));
         self.current_scope = new_scope;
+        // ライフタイムコンテキストでもスコープを管理
+        self.lifetime_context.enter_scope();
     }
 
     fn exit_scope(&mut self) {
         if let Some(parent) = self.current_scope.parent.take() {
             self.current_scope = *parent;
         }
+        // ライフタイムコンテキストでもスコープを管理
+        self.lifetime_context.exit_scope();
+    }
+    
+    /// 借用可能性をチェック
+    fn check_borrowability(&mut self, var_name: &str, is_mut: bool, span: Span) -> AnalysisResult<()> {
+        // 変数が存在するかチェックし、必要な情報を取得
+        let (is_moved, is_mutable) = {
+            let symbol = self.current_scope.lookup(var_name).ok_or_else(|| {
+                AnalysisError::UndefinedVariable {
+                    name: var_name.to_string(),
+                    span,
+                }
+            })?;
+            (symbol.is_moved, symbol.is_mutable)
+        };
+        
+        // 既に移動されている変数は借用できない
+        if is_moved {
+            return Err(AnalysisError::LifetimeError {
+                message: format!("変数 '{}' は既に移動されているため借用できません", var_name),
+                span,
+            });
+        }
+        
+        // 可変借用の場合、変数も可変である必要がある
+        if is_mut && !is_mutable {
+            return Err(AnalysisError::ImmutableVariable {
+                name: var_name.to_string(),
+                span,
+            });
+        }
+        
+        // 既存の借用との競合をチェック
+        self.lifetime_context.check_borrow_conflicts(var_name)?;
+        
+        Ok(())
+    }
+    
+    /// 変数の使用を記録
+    fn record_variable_usage(&mut self, var_name: &str, usage_kind: UsageKind, span: Span) {
+        self.lifetime_context.record_usage(var_name.to_string(), usage_kind, span);
+    }
+    
+    /// 変数が移動されたことを記録
+    fn mark_variable_moved(&mut self, var_name: &str, span: Span) -> AnalysisResult<()> {
+        // 変数が存在するかチェック
+        if self.current_scope.lookup(var_name).is_none() {
+            return Err(AnalysisError::UndefinedVariable {
+                name: var_name.to_string(),
+                span,
+            });
+        }
+        
+        // 移動の使用を記録
+        self.record_variable_usage(var_name, UsageKind::Move, span);
+        
+        // 変数を移動済みとしてマーク
+        self.current_scope.mark_moved(var_name);
+        
+        Ok(())
+    }
+    
+    /// 移動セマンティクスをチェック
+    fn check_move_semantics(&mut self, var_name: &str, span: Span) -> AnalysisResult<()> {
+        let (is_moved, symbol_type) = {
+            let symbol = self.current_scope.lookup(var_name).ok_or_else(|| {
+                AnalysisError::UndefinedVariable {
+                    name: var_name.to_string(),
+                    span,
+                }
+            })?;
+            (symbol.is_moved, symbol.ty.clone())
+        };
+        
+        // 既に移動されている場合はエラー
+        if is_moved {
+            return Err(AnalysisError::LifetimeError {
+                message: format!("変数 '{}' は既に移動されているため再度移動できません", var_name),
+                span,
+            });
+        }
+        
+        // Copyトレイトを持つ型かどうかをチェック（簡単な実装）
+        if self.is_copy_type(&symbol_type) {
+            // Copyできる型は移動ではなくコピーされる
+            self.record_variable_usage(var_name, UsageKind::Read, span);
+        } else {
+            // 非Copyの型は移動される
+            self.mark_variable_moved(var_name, span)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// 型がCopyトレイトを持つかどうかを判定
+    fn is_copy_type(&self, ty: &Type) -> bool {
+        match ty {
+            // プリミティブ型はCopy
+            Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 | Type::I256 |
+            Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 | Type::U256 |
+            Type::F8 | Type::F16 | Type::F32 | Type::F64 | Type::Bool => true,
+            
+            // 参照はCopy（ただし、参照先ではない）
+            Type::Reference(_, _) => true,
+            
+            // タプルは全ての要素がCopyならCopy
+            Type::Tuple(types) => types.iter().all(|t| self.is_copy_type(t)),
+            
+            // 配列は要素がCopyならCopy（ただし、動的サイズ配列は除く）
+            Type::Array(elem_type) => self.is_copy_type(elem_type),
+            
+            // StringやVoidや関数型、ユーザー定義型は通常非Copy
+            _ => false,
+        }
+    }
+    
+    /// 代入時の借用チェック
+    fn check_assignment_borrow(&mut self, target: &Expression, value: &Expression, span: Span) -> AnalysisResult<()> {
+        // 代入先が可変であることを確認
+        if let Expression::Identifier(id) = target {
+            let is_mutable = {
+                let symbol = self.current_scope.lookup(&id.name).ok_or_else(|| {
+                    AnalysisError::UndefinedVariable {
+                        name: id.name.clone(),
+                        span,
+                    }
+                })?;
+                symbol.is_mutable
+            };
+            
+            if !is_mutable {
+                return Err(AnalysisError::ImmutableVariable {
+                    name: id.name.clone(),
+                    span,
+                });
+            }
+            
+            // 書き込み使用を記録
+            self.record_variable_usage(&id.name, UsageKind::Write, span);
+        }
+        
+        // 代入する値が移動される場合をチェック
+        if let Expression::Identifier(id) = value {
+            // 値の型を取得して移動セマンティクスをチェック
+            let value_type = self.analyze_expression(value)?;
+            if !self.is_copy_type(&value_type) {
+                self.check_move_semantics(&id.name, span)?;
+            }
+        }
+        
+        Ok(())
     }
 }
 
@@ -1765,5 +2294,139 @@ mod tests {
             }
             _ => panic!("Expected UndefinedVariable error"),
         }
+    }
+    
+    #[test]
+    fn test_move_semantics() {
+        use crate::ast::*;
+        
+        let mut analyzer = SemanticAnalyzer::new();
+        let program = Program {
+            package: PackageDecl {
+                name: "test".to_string(),
+                span: Span::dummy(),
+            },
+            imports: vec![],
+            items: vec![Item::Function(FunctionDecl {
+                name: "main".to_string(),
+                params: vec![],
+                return_type: None,
+                lives_clause: None,
+                body: Block {
+                    statements: vec![
+                        // let x: String;
+                        Statement::Let(LetStatement {
+                            pattern: Pattern::Identifier("x".to_string(), false),
+                            ty: Some(Type::String),
+                            init: Some(Expression::String(StringLit {
+                                value: "hello".to_string(),
+                                span: Span::dummy(),
+                            })),
+                            span: Span::dummy(),
+                        }),
+                        // let y = x; // xを移動
+                        Statement::Let(LetStatement {
+                            pattern: Pattern::Identifier("y".to_string(), false),
+                            ty: None,
+                            init: Some(Expression::Identifier(Identifier {
+                                name: "x".to_string(),
+                                span: Span::new(10, 11),
+                            })),
+                            span: Span::dummy(),
+                        }),
+                        // println!(x); // xは既に移動されているのでエラーになるはず
+                        Statement::Expression(Expression::Call(CallExpr {
+                            callee: Box::new(Expression::Identifier(Identifier {
+                                name: "println".to_string(),
+                                span: Span::dummy(),
+                            })),
+                            args: vec![Expression::Identifier(Identifier {
+                                name: "x".to_string(),
+                                span: Span::new(20, 21),
+                            })],
+                            span: Span::dummy(),
+                        })),
+                    ],
+                    span: Span::dummy(),
+                },
+                is_public: false,
+                span: Span::dummy(),
+            })],
+            span: Span::dummy(),
+        };
+
+        let result = analyzer.analyze(&program);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AnalysisError::LifetimeError { message, .. } => {
+                assert!(message.contains("移動されているため使用できません"));
+            }
+            _ => panic!("Expected LifetimeError for use after move"),
+        }
+    }
+    
+    #[test]
+    fn test_copy_types_no_move() {
+        use crate::ast::*;
+        
+        let mut analyzer = SemanticAnalyzer::new();
+        let program = Program {
+            package: PackageDecl {
+                name: "test".to_string(),
+                span: Span::dummy(),
+            },
+            imports: vec![],
+            items: vec![Item::Function(FunctionDecl {
+                name: "main".to_string(),
+                params: vec![],
+                return_type: None,
+                lives_clause: None,
+                body: Block {
+                    statements: vec![
+                        // let x = 42; // i64はCopyなので移動しない
+                        Statement::Let(LetStatement {
+                            pattern: Pattern::Identifier("x".to_string(), false),
+                            ty: Some(Type::I64),
+                            init: Some(Expression::Integer(IntegerLit {
+                                value: 42,
+                                suffix: None,
+                                span: Span::dummy(),
+                            })),
+                            span: Span::dummy(),
+                        }),
+                        // let y = x; // xをコピー
+                        Statement::Let(LetStatement {
+                            pattern: Pattern::Identifier("y".to_string(), false),
+                            ty: None,
+                            init: Some(Expression::Identifier(Identifier {
+                                name: "x".to_string(),
+                                span: Span::dummy(),
+                            })),
+                            span: Span::dummy(),
+                        }),
+                        // println!(x); // xはまだ使える
+                        Statement::Expression(Expression::Call(CallExpr {
+                            callee: Box::new(Expression::Identifier(Identifier {
+                                name: "println".to_string(),
+                                span: Span::dummy(),
+                            })),
+                            args: vec![Expression::Identifier(Identifier {
+                                name: "x".to_string(),
+                                span: Span::dummy(),
+                            })],
+                            span: Span::dummy(),
+                        })),
+                    ],
+                    span: Span::dummy(),
+                },
+                is_public: false,
+                span: Span::dummy(),
+            })],
+            span: Span::dummy(),
+        };
+
+        let result = analyzer.analyze(&program);
+        // Copyできる型の場合、エラーにならないはず
+        assert!(result.is_ok(), "Copy types should not cause move errors");
     }
 }

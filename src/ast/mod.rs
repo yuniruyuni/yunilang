@@ -19,6 +19,15 @@ impl Span {
     }
 }
 
+impl From<std::ops::Range<usize>> for Span {
+    fn from(range: std::ops::Range<usize>) -> Self {
+        Self {
+            start: range.start,
+            end: range.end,
+        }
+    }
+}
+
 /// Root node of the AST representing a complete Yuni program
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Program {

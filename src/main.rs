@@ -1,4 +1,3 @@
-use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
@@ -13,10 +12,14 @@ use tempfile::TempDir;
 mod analyzer;
 mod ast;
 mod codegen;
+mod compiler;
+mod error;
 mod lexer;
 mod parser;
 mod runtime;
 
+use crate::compiler::{CompilationPipeline, CompilationState};
+use crate::error::{DiagnosticError, ErrorCollector, YuniError, YuniResult};
 use crate::lexer::{Lexer, Token};
 use crate::parser::Parser as YuniParser;
 
@@ -103,7 +106,7 @@ enum Commands {
     },
 }
 
-fn main() -> Result<()> {
+fn main() -> YuniResult<()> {
     // Initialize logger before parsing CLI args
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -141,37 +144,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Compilation pipeline state
-struct CompilationState {
-    source_file: PathBuf,
-    source: String,
-    files: SimpleFiles<String, String>,
-    file_id: usize,
-}
-
-impl CompilationState {
-    fn new(source_file: PathBuf) -> Result<Self> {
-        let source = fs::read_to_string(&source_file)
-            .with_context(|| format!("Failed to read source file: {:?}", source_file))?;
-
-        let mut files = SimpleFiles::new();
-        let file_id = files.add(source_file.display().to_string(), source.clone());
-
-        Ok(Self {
-            source_file,
-            source,
-            files,
-            file_id,
-        })
-    }
-
-    fn report_error(&self, diagnostic: &Diagnostic<usize>) -> Result<()> {
-        let writer = StandardStream::stderr(ColorChoice::Always);
-        let config = codespan_reporting::term::Config::default();
-        codespan_reporting::term::emit(&mut writer.lock(), &config, &self.files, diagnostic)?;
-        Ok(())
-    }
-}
 
 fn compile(
     input: PathBuf,
@@ -182,19 +154,19 @@ fn compile(
     dump_tokens: bool,
     keep_temps: bool,
     verbose: bool,
-) -> Result<()> {
+) -> YuniResult<()> {
     if verbose {
         println!("{}: Compiling {:?} with optimization level O{}", 
                 "info".blue().bold(), input, opt_level);
     }
 
     // Initialize compilation state
-    let state = CompilationState::new(input.clone())?;
+    let state = CompilationState::new(&input)?;
+    let context = inkwell::context::Context::create();
+    let mut pipeline = CompilationPipeline::new(state, &context, verbose);
 
-    // 1. Tokenize
-    if verbose { println!("{}: Starting lexical analysis", "step".cyan().bold()); }
-    let lexer = Lexer::new(&state.source);
-    let tokens: Vec<_> = lexer.collect();
+    // Run the compilation pipeline
+    let tokens = pipeline.tokenize();
 
     if dump_tokens {
         println!("{}", "=== Tokens ===".blue().bold());
@@ -204,70 +176,37 @@ fn compile(
         println!();
     }
 
-    // Check for lexer errors
-    let lexer_errors: Vec<_> = tokens
-        .iter()
-        .filter(|t| matches!(t.token, Token::Error))
-        .collect();
+    let ast = pipeline.parse(tokens);
 
-    if !lexer_errors.is_empty() {
-        for error in lexer_errors {
-            let diagnostic = Diagnostic::error()
-                .with_message("Lexical error: unrecognized token")
-                .with_labels(vec![Label::primary(
-                    state.file_id,
-                    error.span.start..error.span.end,
-                )]);
-            state.report_error(&diagnostic)?;
+    if let Some(ref ast) = ast {
+        if dump_ast {
+            println!("{}", "=== AST ===".blue().bold());
+            println!("{}", serde_json::to_string_pretty(ast)
+                .map_err(|e| YuniError::Other(format!("Failed to serialize AST: {}", e)))?);
+            println!();
         }
-        anyhow::bail!("Lexical analysis failed");
+
+        pipeline.analyze(ast);
     }
 
-    // 2. Parse
-    if verbose { println!("{}: Starting parsing", "step".cyan().bold()); }
-    let mut parser = YuniParser::new(tokens);
-    let ast = match parser.parse() {
-        Ok(program) => program,
-        Err(e) => {
-            let diagnostic = Diagnostic::error()
-                .with_message(format!("Parse error: {}", e))
-                .with_labels(vec![Label::primary(state.file_id, 0..1)]);
-            state.report_error(&diagnostic)?;
-            anyhow::bail!("Parsing failed");
-        }
+    // エラーがある場合は早期リターン
+    if pipeline.state().has_errors() {
+        pipeline.report_errors()?;
+        return Err(YuniError::Other("Compilation failed".to_string()));
+    }
+
+    // コード生成
+    let codegen = if let Some(ast) = ast {
+        pipeline.codegen(&ast)?
+    } else {
+        return Err(YuniError::Other("No AST generated".to_string()));
     };
-
-    if dump_ast {
-        println!("{}", "=== AST ===".blue().bold());
-        println!("{}", serde_json::to_string_pretty(&ast)?);
-        println!();
-    }
-
-    // 3. Semantic analysis
-    if verbose { println!("{}: Starting semantic analysis", "step".cyan().bold()); }
-    let mut analyzer = analyzer::SemanticAnalyzer::new();
-    if let Err(e) = analyzer.analyze(&ast) {
-        let diagnostic = Diagnostic::error()
-            .with_message(format!("Semantic error: {}", e))
-            .with_labels(vec![Label::primary(state.file_id, 0..1)]);
-        state.report_error(&diagnostic)?;
-        anyhow::bail!("Semantic analysis failed");
-    }
-
-    // 4. Code generation
-    if verbose { println!("{}: Starting code generation", "step".cyan().bold()); }
-    let context = inkwell::context::Context::create();
-    let mut codegen =
-        codegen::CodeGenerator::new(&context, &state.source_file.display().to_string());
-
-    // Compile the AST
-    codegen.compile_program(&ast)?;
 
     // Create temporary directory for intermediate files
     let temp_dir = if keep_temps {
         None
     } else {
-        Some(TempDir::new().context("Failed to create temporary directory")?)
+        Some(TempDir::new().map_err(|e| YuniError::Io(format!("Failed to create temporary directory: {}", e)))?)
     };
 
     let get_temp_path = |name: &str| -> PathBuf {
@@ -323,10 +262,10 @@ fn compile(
                 .arg(&output_path)
                 .arg(&temp_ll)
                 .status()
-                .context("Failed to run llc")?;
+                .map_err(|e| YuniError::Other(format!("Failed to run llc: {}", e)))?;
 
             if !status.success() {
-                anyhow::bail!("llc failed with status: {}", status);
+                return Err(YuniError::Other(format!("llc failed with status: {}", status)));
             }
 
             // Clean up temp file if not keeping temps
@@ -371,33 +310,35 @@ fn compile(
                 .arg(&program_obj)
                 .arg(&program_ll)
                 .status()
-                .context("Failed to run llc on program")?;
+                .map_err(|e| YuniError::Other(format!("Failed to run llc on program: {}", e)))?;
 
             if !status.success() {
-                anyhow::bail!("Failed to compile program LLVM IR to object file");
+                return Err(YuniError::Other("Failed to compile program LLVM IR to object file".to_string()));
             }
 
-            if verbose { println!("{}: Step 3 - Compiling runtime to object file", "substep".yellow()); }
+            if verbose { println!("{}: Step 3 - Compiling Rust runtime to object file", "substep".yellow()); }
 
-            // Step 3: Compile runtime.c to object file
-            let runtime_obj = get_temp_path("runtime.o");
-            let runtime_c_path = Path::new("src/runtime.c");
+            // Step 3: Compile Rust runtime to object file
+            let runtime_rs_path = Path::new("src/runtime/mod.rs");
             
-            if !runtime_c_path.exists() {
-                anyhow::bail!("Runtime C file not found at {:?}", runtime_c_path);
+            if !runtime_rs_path.exists() {
+                return Err(YuniError::Other(format!("Runtime Rust file not found at {:?}", runtime_rs_path)));
             }
 
-            let status = Command::new("clang")
-                .arg("-c")
-                .arg(format!("-O{}", opt_level))
+            // First compile the Rust runtime to a static library
+            let runtime_lib = get_temp_path("libyuniruntime.a");
+            let status = Command::new("rustc")
+                .arg("--crate-type=staticlib")
+                .arg("--crate-name=yuniruntime")
+                .arg(format!("-Copt-level={}", opt_level))
                 .arg("-o")
-                .arg(&runtime_obj)
-                .arg(runtime_c_path)
+                .arg(&runtime_lib)
+                .arg(runtime_rs_path)
                 .status()
-                .context("Failed to compile runtime.c")?;
+                .map_err(|e| YuniError::Other(format!("Failed to compile Rust runtime: {}", e)))?;
 
             if !status.success() {
-                anyhow::bail!("Failed to compile runtime.c");
+                return Err(YuniError::Other("Failed to compile Rust runtime".to_string()));
             }
 
             if verbose { println!("{}: Step 4 - Linking executable", "substep".yellow()); }
@@ -407,13 +348,27 @@ fn compile(
             cmd.arg("-o")
                 .arg(&executable_path)
                 .arg(&program_obj)
-                .arg(&runtime_obj)
-                .arg("-lm"); // Math library
+                .arg(&runtime_lib)
+                .arg("-lm") // Math library
+                .arg("-lpthread"); // Thread library for Rust runtime
+            
+            // On macOS, we need to link against system libraries
+            #[cfg(target_os = "macos")]
+            {
+                cmd.arg("-framework").arg("System");
+                cmd.arg("-lc++");
+            }
+            
+            // On Linux, link against standard C++ library
+            #[cfg(target_os = "linux")]
+            {
+                cmd.arg("-lstdc++");
+            }
 
-            let status = cmd.status().context("Failed to link executable")?;
+            let status = cmd.status().map_err(|e| YuniError::Other(format!("Failed to link executable: {}", e)))?;
 
             if !status.success() {
-                anyhow::bail!("Failed to link executable");
+                return Err(YuniError::Other("Failed to link executable".to_string()));
             }
 
             // Clean up intermediate files if not keeping them
@@ -423,7 +378,7 @@ fn compile(
                 // If we're using the source directory but not keeping temps, clean up manually
                 fs::remove_file(&program_ll).ok();
                 fs::remove_file(&program_obj).ok();
-                fs::remove_file(&runtime_obj).ok();
+                fs::remove_file(&runtime_lib).ok();
             }
 
             println!("{}: Created executable {:?}", "success".green().bold(), executable_path);
@@ -447,7 +402,7 @@ fn inkwell_opt_level(level: u8) -> inkwell::OptimizationLevel {
     }
 }
 
-fn find_llc_command() -> Result<String> {
+fn find_llc_command() -> YuniResult<String> {
     // Try to find llc command in system paths
     if let Ok(output) = Command::new("which").arg("llc").output() {
         if output.status.success() {
@@ -492,10 +447,10 @@ fn find_llc_command() -> Result<String> {
         }
     }
 
-    anyhow::bail!("Could not find llc command. Please install LLVM 18 or add llc to your PATH")
+    Err(YuniError::Other("Could not find llc command. Please install LLVM 18 or add llc to your PATH".to_string()))
 }
 
-fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> Result<()> {
+fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> YuniResult<()> {
     log::info!("Running {:?} with args: {:?}", input, args);
 
     // Create a temporary executable
@@ -519,7 +474,7 @@ fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> Result<()> {
     let status = Command::new(&temp_exe)
         .args(&args)
         .status()
-        .context("Failed to execute compiled program")?;
+        .map_err(|e| YuniError::Other(format!("Failed to execute compiled program: {}", e)))?;
 
     // Clean up
     fs::remove_file(&temp_exe).ok();
@@ -528,14 +483,14 @@ fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> Result<()> {
         if let Some(code) = status.code() {
             std::process::exit(code);
         } else {
-            anyhow::bail!("Program terminated by signal");
+            return Err(YuniError::Other("Program terminated by signal".to_string()));
         }
     }
 
     Ok(())
 }
 
-fn repl() -> Result<()> {
+fn repl() -> YuniResult<()> {
     println!("{}", "Yuni Language REPL".blue().bold());
     println!("Type ':quit' or ':q' to exit, ':help' for help\n");
 
@@ -599,7 +554,7 @@ fn evaluate_repl_input(
     input: &str,
     _context: &inkwell::context::Context,
     _line_number: usize,
-) -> Result<Option<String>> {
+) -> YuniResult<Option<String>> {
     // For now, just parse and check syntax
     let lexer = Lexer::new(input);
     let tokens: Vec<_> = lexer.collect();
@@ -607,7 +562,7 @@ fn evaluate_repl_input(
     // Check for lexer errors
     for token in &tokens {
         if matches!(token.token, Token::Error) {
-            anyhow::bail!("Lexical error: unrecognized token");
+            return Err(YuniError::Other("Lexical error: unrecognized token".to_string()));
         }
     }
 
@@ -626,66 +581,38 @@ fn evaluate_repl_input(
                     // TODO: Execute statement
                     Ok(None)
                 }
-                Err(e) => anyhow::bail!("Parse error: {}", e),
+                Err(e) => return Err(YuniError::Other(format!("Parse error: {}", e))),
             }
         }
     }
 }
 
-fn check(input: PathBuf) -> Result<()> {
+fn check(input: PathBuf) -> YuniResult<()> {
     log::info!("Checking {:?}", input);
 
-    let state = CompilationState::new(input)?;
-    let mut has_errors = false;
+    // コンパイルパイプラインを使用
+    let state = CompilationState::new(&input)?;
+    let context = inkwell::context::Context::create();
+    let mut pipeline = CompilationPipeline::new(state, &context, false);
 
-    // 1. Tokenize
-    log::debug!("Starting lexical analysis");
-    let lexer = Lexer::new(&state.source);
-    let tokens: Vec<_> = lexer.collect();
-
-    // Check for lexer errors
-    for token in &tokens {
-        if matches!(token.token, Token::Error) {
-            has_errors = true;
-            let diagnostic = Diagnostic::error()
-                .with_message("Lexical error: unrecognized token")
-                .with_labels(vec![Label::primary(
-                    state.file_id,
-                    token.span.start..token.span.end,
-                )]);
-            state.report_error(&diagnostic)?;
-        }
+    // レキシカル解析
+    let tokens = pipeline.tokenize();
+    
+    // 構文解析
+    let ast = pipeline.parse(tokens);
+    
+    // セマンティック解析
+    if let Some(ref ast) = ast {
+        pipeline.analyze(ast);
     }
-
-    if has_errors {
-        anyhow::bail!("Lexical analysis failed");
+    
+    // エラーレポート
+    pipeline.report_errors()?;
+    
+    if !pipeline.state().has_errors() {
+        println!("{}: No errors found", "success".green().bold());
+        Ok(())
+    } else {
+        Err(YuniError::Other("Check failed".to_string()))
     }
-
-    // 2. Parse
-    log::debug!("Starting parsing");
-    let mut parser = YuniParser::new(tokens);
-    let ast = match parser.parse() {
-        Ok(program) => program,
-        Err(e) => {
-            let diagnostic = Diagnostic::error()
-                .with_message(format!("Parse error: {}", e))
-                .with_labels(vec![Label::primary(state.file_id, 0..1)]);
-            state.report_error(&diagnostic)?;
-            anyhow::bail!("Parsing failed");
-        }
-    };
-
-    // 3. Semantic analysis
-    log::debug!("Starting semantic analysis");
-    let mut analyzer = analyzer::SemanticAnalyzer::new();
-    if let Err(e) = analyzer.analyze(&ast) {
-        let diagnostic = Diagnostic::error()
-            .with_message(format!("Semantic error: {}", e))
-            .with_labels(vec![Label::primary(state.file_id, 0..1)]);
-        state.report_error(&diagnostic)?;
-        anyhow::bail!("Semantic analysis failed");
-    }
-
-    println!("{}: No errors found", "success".green().bold());
-    Ok(())
 }

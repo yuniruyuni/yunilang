@@ -6,10 +6,14 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 
 /// Print a string to stdout
+/// 
+/// # Safety
+/// `s`は有効なnull終端C文字列を指すポインタである必要があります。
 #[no_mangle]
 pub extern "C" fn yuni_print_str(s: *const c_char) {
     unsafe {
         if !s.is_null() {
+            // SAFETY: 呼び出し側が有効なnull終端C文字列を提供することを前提とする
             let c_str = CStr::from_ptr(s);
             if let Ok(rust_str) = c_str.to_str() {
                 print!("{}", rust_str);
@@ -19,10 +23,14 @@ pub extern "C" fn yuni_print_str(s: *const c_char) {
 }
 
 /// Print a string to stdout with newline
+/// 
+/// # Safety
+/// `s`は有効なnull終端C文字列を指すポインタである必要があります。
 #[no_mangle]
 pub extern "C" fn yuni_println_str(s: *const c_char) {
     unsafe {
         if !s.is_null() {
+            // SAFETY: 呼び出し側が有効なnull終端C文字列を提供することを前提とする
             let c_str = CStr::from_ptr(s);
             if let Ok(rust_str) = c_str.to_str() {
                 println!("{}", rust_str);
@@ -65,23 +73,36 @@ pub extern "C" fn yuni_alloc(size: usize) -> *mut u8 {
 }
 
 /// Free memory
+/// 
+/// # Safety
+/// 呼び出し側は以下を保証する必要があります：
+/// - `ptr`は`yuni_alloc`により割り当てられたポインタである
+/// - `size`は割り当て時と同じサイズである
+/// - このポインタは一度しか解放されない
 #[no_mangle]
 pub extern "C" fn yuni_free(ptr: *mut u8, size: usize) {
     unsafe {
-        if !ptr.is_null() {
+        if !ptr.is_null() && size > 0 {
+            // SAFETY: 呼び出し側がyuni_allocで割り当てられたポインタと
+            // 正しいサイズを提供することを前提とする
             let _ = Vec::from_raw_parts(ptr, size, size);
         }
     }
 }
 
 /// String concatenation
+/// 
+/// # Safety
+/// `s1`と`s2`は有効なnull終端C文字列を指すポインタである必要があります。
+/// 戻り値のポインタは呼び出し側が`yuni_free`で解放する必要があります。
 #[no_mangle]
-pub extern "C" fn yuni_str_concat(s1: *const c_char, s2: *const c_char) -> *mut c_char {
+pub extern "C" fn yuni_string_concat(s1: *const c_char, s2: *const c_char) -> *mut c_char {
     unsafe {
         if s1.is_null() || s2.is_null() {
             return std::ptr::null_mut();
         }
 
+        // SAFETY: 呼び出し側が有効なnull終端C文字列を提供することを前提とする
         let c_str1 = CStr::from_ptr(s1);
         let c_str2 = CStr::from_ptr(s2);
 
@@ -99,12 +120,16 @@ pub extern "C" fn yuni_str_concat(s1: *const c_char, s2: *const c_char) -> *mut 
 }
 
 /// String length
+/// 
+/// # Safety
+/// `s`は有効なnull終端C文字列を指すポインタである必要があります。
 #[no_mangle]
 pub extern "C" fn yuni_str_len(s: *const c_char) -> usize {
     unsafe {
         if s.is_null() {
             return 0;
         }
+        // SAFETY: 呼び出し側が有効なnull終端C文字列を提供することを前提とする
         let c_str = CStr::from_ptr(s);
         c_str.to_bytes().len()
     }
@@ -112,7 +137,7 @@ pub extern "C" fn yuni_str_len(s: *const c_char) -> usize {
 
 /// Convert integer to string
 #[no_mangle]
-pub extern "C" fn yuni_int_to_str(n: i64) -> *mut c_char {
+pub extern "C" fn yuni_i64_to_string(n: i64) -> *mut c_char {
     let s = n.to_string();
     if let Ok(c_string) = CString::new(s) {
         c_string.into_raw()
@@ -123,13 +148,33 @@ pub extern "C" fn yuni_int_to_str(n: i64) -> *mut c_char {
 
 /// Convert float to string
 #[no_mangle]
-pub extern "C" fn yuni_float_to_str(n: f64) -> *mut c_char {
+pub extern "C" fn yuni_f64_to_string(n: f64) -> *mut c_char {
     let s = n.to_string();
     if let Ok(c_string) = CString::new(s) {
         c_string.into_raw()
     } else {
         std::ptr::null_mut()
     }
+}
+
+/// Convert boolean to string
+#[no_mangle]
+pub extern "C" fn yuni_bool_to_string(b: bool) -> *mut c_char {
+    let s = if b { "true" } else { "false" };
+    if let Ok(c_string) = CString::new(s) {
+        c_string.into_raw()
+    } else {
+        std::ptr::null_mut()
+    }
+}
+
+/// Print string with newline (wrapper for yuni_println_str)
+/// 
+/// # Safety
+/// `s`は有効なnull終端C文字列を指すポインタである必要があります。
+#[no_mangle]
+pub extern "C" fn yuni_println(s: *const c_char) {
+    yuni_println_str(s);
 }
 
 /// Read line from stdin
@@ -164,10 +209,14 @@ pub extern "C" fn yuni_exit(code: c_int) {
 }
 
 /// Panic handler
+/// 
+/// # Safety
+/// `msg`は有効なnull終端C文字列を指すポインタである必要があります。
 #[no_mangle]
 pub extern "C" fn yuni_panic(msg: *const c_char) {
     unsafe {
         if !msg.is_null() {
+            // SAFETY: 呼び出し側が有効なnull終端C文字列を提供することを前提とする
             let c_str = CStr::from_ptr(msg);
             if let Ok(rust_str) = c_str.to_str() {
                 panic!("{}", rust_str);
@@ -191,12 +240,13 @@ mod tests {
 
     #[test]
     fn test_int_to_str() {
-        let ptr = yuni_int_to_str(42);
+        let ptr = yuni_i64_to_string(42);
         assert!(!ptr.is_null());
         unsafe {
+            // SAFETY: yuni_int_to_strが返すポインタは有効なC文字列
             let c_str = CStr::from_ptr(ptr);
             assert_eq!(c_str.to_str().unwrap(), "42");
-            // Clean up
+            // メモリリークを防ぐためにポインタを解放
             let _ = CString::from_raw(ptr);
         }
     }

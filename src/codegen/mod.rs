@@ -3,12 +3,12 @@
 //! This module is responsible for generating LLVM IR from the AST.
 
 use crate::ast::*;
-use anyhow::{bail, Context, Result};
+use crate::error::{CodegenError, YuniError, YuniResult};
 use inkwell::builder::Builder;
 use inkwell::context::Context as LLVMContext;
 use inkwell::module::{Linkage, Module};
 use inkwell::passes::PassManager;
-use inkwell::targets::{CodeModel, FileType, RelocMode, Target, TargetMachine, TargetTriple};
+use inkwell::targets::{CodeModel, FileType, RelocMode, Target, TargetMachine};
 use inkwell::types::{BasicMetadataTypeEnum, BasicTypeEnum, StructType};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
@@ -17,23 +17,32 @@ use std::path::Path;
 
 /// Symbol table entry for tracking variables and their types
 #[derive(Debug, Clone)]
-struct Symbol {
-    ptr: PointerValue<'static>,
+struct Symbol<'ctx> {
+    ptr: PointerValue<'ctx>,
     ty: Type,
     is_mutable: bool,
 }
 
 /// Scope for managing variable lifetimes
-struct Scope {
-    symbols: HashMap<String, Symbol>,
+struct Scope<'ctx> {
+    symbols: HashMap<String, Symbol<'ctx>>,
 }
 
-impl Scope {
+impl<'ctx> Scope<'ctx> {
     fn new() -> Self {
         Self {
             symbols: HashMap::new(),
         }
     }
+}
+
+/// 構造体のフィールド情報
+#[derive(Debug, Clone)]
+struct StructInfo {
+    /// フィールド名からインデックスへのマッピング
+    field_indices: HashMap<String, u32>,
+    /// フィールドの型情報（AST型を保持）
+    field_types: Vec<Type>,
 }
 
 /// Main code generator structure
@@ -44,9 +53,12 @@ pub struct CodeGenerator<'ctx> {
     pass_manager: PassManager<FunctionValue<'ctx>>,
 
     // Symbol tables and scopes
-    scopes: Vec<Scope>,
+    scopes: Vec<Scope<'ctx>>,
     functions: HashMap<String, FunctionValue<'ctx>>,
     types: HashMap<String, StructType<'ctx>>,
+    
+    // 構造体のフィールド情報
+    struct_info: HashMap<String, StructInfo>,
 
     // Current function being compiled
     current_function: Option<FunctionValue<'ctx>>,
@@ -72,6 +84,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             scopes: vec![Scope::new()], // Global scope
             functions: HashMap::new(),
             types: HashMap::new(),
+            struct_info: HashMap::new(),
             current_function: None,
             runtime_functions: HashMap::new(),
         };
@@ -171,9 +184,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.runtime_functions
             .insert("yuni_println".to_string(), println);
     }
+    
+    /// Get the LLVM module
+    pub fn get_module(&self) -> &Module<'ctx> {
+        &self.module
+    }
 
     /// Compile a complete program
-    pub fn compile_program(&mut self, program: &Program) -> Result<()> {
+    pub fn compile_program(&mut self, program: &Program) -> YuniResult<()> {
         // First pass: declare all types
         for item in &program.items {
             if let Item::TypeDef(type_def) = item {
@@ -211,17 +229,30 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Declare a type (struct or enum)
-    fn declare_type(&mut self, type_def: &TypeDef) -> Result<()> {
+    fn declare_type(&mut self, type_def: &TypeDef) -> YuniResult<()> {
         match type_def {
             TypeDef::Struct(struct_def) => {
                 let field_types: Vec<BasicTypeEnum> = struct_def
                     .fields
                     .iter()
                     .map(|field| self.get_llvm_type(&field.ty))
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect::<YuniResult<Vec<_>>>()?;
 
                 let struct_type = self.context.struct_type(&field_types, false);
                 self.types.insert(struct_def.name.clone(), struct_type);
+                
+                // フィールド情報を保存
+                let mut field_indices = HashMap::new();
+                let mut ast_field_types = Vec::new();
+                for (index, field) in struct_def.fields.iter().enumerate() {
+                    field_indices.insert(field.name.clone(), index as u32);
+                    ast_field_types.push(field.ty.clone());
+                }
+                
+                self.struct_info.insert(struct_def.name.clone(), StructInfo {
+                    field_indices,
+                    field_types: ast_field_types,
+                });
             }
             TypeDef::Enum(enum_def) => {
                 // Enums are represented as tagged unions
@@ -235,7 +266,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .fields
                         .iter()
                         .map(|field| self.get_llvm_type(&field.ty))
-                        .collect::<Result<Vec<_>>>()?;
+                        .collect::<YuniResult<Vec<_>>>()?;
 
                     let variant_size = field_types.len();
                     if variant_size > max_size {
@@ -255,12 +286,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Declare a function
-    fn declare_function(&mut self, func: &FunctionDecl) -> Result<()> {
+    fn declare_function(&mut self, func: &FunctionDecl) -> YuniResult<()> {
         let param_types: Vec<BasicMetadataTypeEnum> = func
             .params
             .iter()
             .map(|param| Ok(self.get_llvm_type(&param.ty)?.into()))
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<YuniResult<Vec<_>>>()?;
 
         let fn_type = if let Some(ret_ty) = &func.return_type {
             let return_type = self.get_llvm_type(ret_ty)?;
@@ -288,7 +319,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Declare a method (convert to function with receiver as first parameter)
-    fn declare_method(&mut self, method: &MethodDecl) -> Result<()> {
+    fn declare_method(&mut self, method: &MethodDecl) -> YuniResult<()> {
         let mut param_types: Vec<BasicMetadataTypeEnum> =
             vec![self.get_llvm_type(&method.receiver.ty)?.into()];
 
@@ -296,10 +327,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             method
                 .params
                 .iter()
-                .map(|param| -> Result<BasicMetadataTypeEnum> {
+                .map(|param| -> YuniResult<BasicMetadataTypeEnum> {
                     Ok(self.get_llvm_type(&param.ty)?.into())
                 })
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<YuniResult<Vec<_>>>()?,
         );
 
         let fn_type = if let Some(ret_ty) = &method.return_type {
@@ -323,10 +354,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if let Type::UserDefined(name) = inner.as_ref() {
                     name
                 } else {
-                    bail!("Invalid receiver type for method")
+                    return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "Invalid receiver type for method".to_string(),
+                        span: Span::dummy(),
+                    }))
                 }
             }
-            _ => bail!("Invalid receiver type for method"),
+            _ => return Err(YuniError::Codegen(CodegenError::InvalidType {
+                message: "Invalid receiver type for method".to_string(),
+                span: Span::dummy(),
+            })),
         };
 
         let method_name = format!("{}_{}", receiver_type_name, method.name);
@@ -344,11 +381,11 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile a function
-    fn compile_function(&mut self, func: &FunctionDecl) -> Result<()> {
+    fn compile_function(&mut self, func: &FunctionDecl) -> YuniResult<()> {
         let function = self
             .functions
             .get(&func.name)
-            .ok_or_else(|| anyhow::anyhow!("Function {} not found", func.name))?
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: format!("Function {} not found", func.name) }))?
             .clone();
 
         self.current_function = Some(function);
@@ -364,7 +401,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         for (i, param) in func.params.iter().enumerate() {
             let param_value = function
                 .get_nth_param(i as u32)
-                .ok_or_else(|| anyhow::anyhow!("Parameter {} not found", i))?;
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: format!("Parameter {} not found", i) }))?;
 
             // Allocate stack space for parameter
             let alloca = self.create_entry_block_alloca(&param.name, &param.ty)?;
@@ -388,7 +425,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         if function.verify(true) {
             self.pass_manager.run_on(&function);
         } else {
-            bail!("Function verification failed: {}", func.name);
+            return Err(YuniError::Codegen(CodegenError::Internal {
+                message: format!("Function verification failed: {}", func.name),
+            }));
         }
 
         self.current_function = None;
@@ -396,24 +435,30 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile a method
-    fn compile_method(&mut self, method: &MethodDecl) -> Result<()> {
+    fn compile_method(&mut self, method: &MethodDecl) -> YuniResult<()> {
         let receiver_type_name = match &method.receiver.ty {
             Type::UserDefined(name) => name,
             Type::Reference(inner, _) => {
                 if let Type::UserDefined(name) = inner.as_ref() {
                     name
                 } else {
-                    bail!("Invalid receiver type for method")
+                    return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "Invalid receiver type for method".to_string(),
+                        span: Span::dummy(),
+                    }))
                 }
             }
-            _ => bail!("Invalid receiver type for method"),
+            _ => return Err(YuniError::Codegen(CodegenError::InvalidType {
+                message: "Invalid receiver type for method".to_string(),
+                span: Span::dummy(),
+            })),
         };
 
         let method_name = format!("{}_{}", receiver_type_name, method.name);
         let function = self
             .functions
             .get(&method_name)
-            .ok_or_else(|| anyhow::anyhow!("Method {} not found", method_name))?
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: format!("Method {} not found", method_name) }))?
             .clone();
 
         self.current_function = Some(function);
@@ -428,7 +473,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Add receiver to scope
         let receiver_value = function
             .get_nth_param(0)
-            .ok_or_else(|| anyhow::anyhow!("Receiver parameter not found"))?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "Receiver parameter not found".to_string() }))?;
 
         let default_name = "self".to_string();
         let receiver_name = method.receiver.name.as_ref().unwrap_or(&default_name);
@@ -440,7 +485,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         for (i, param) in method.params.iter().enumerate() {
             let param_value = function
                 .get_nth_param((i + 1) as u32)
-                .ok_or_else(|| anyhow::anyhow!("Parameter {} not found", i))?;
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: format!("Parameter {} not found", i) }))?;
 
             let alloca = self.create_entry_block_alloca(&param.name, &param.ty)?;
             self.builder.build_store(alloca, param_value)?;
@@ -462,7 +507,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         if function.verify(true) {
             self.pass_manager.run_on(&function);
         } else {
-            bail!("Method verification failed: {}", method_name);
+            return Err(YuniError::Codegen(CodegenError::Internal {
+                message: format!("Method verification failed: {}", method_name),
+            }));
         }
 
         self.current_function = None;
@@ -470,7 +517,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile a block
-    fn compile_block(&mut self, block: &Block) -> Result<()> {
+    fn compile_block(&mut self, block: &Block) -> YuniResult<()> {
         self.push_scope();
 
         for stmt in &block.statements {
@@ -487,7 +534,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile a statement
-    fn compile_statement(&mut self, stmt: &Statement) -> Result<()> {
+    fn compile_statement(&mut self, stmt: &Statement) -> YuniResult<()> {
         match stmt {
             Statement::Let(let_stmt) => self.compile_let_statement(let_stmt),
             Statement::Assignment(assign) => self.compile_assignment(assign),
@@ -504,7 +551,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile a let statement
-    fn compile_let_statement(&mut self, let_stmt: &LetStatement) -> Result<()> {
+    fn compile_let_statement(&mut self, let_stmt: &LetStatement) -> YuniResult<()> {
         match &let_stmt.pattern {
             Pattern::Identifier(name, is_mut) => {
                 let ty = if let Some(ty) = &let_stmt.ty {
@@ -513,10 +560,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // Type inference
                     self.infer_type(init)?
                 } else {
-                    bail!(
-                        "Cannot infer type for variable {} without initializer",
-                        name
-                    );
+                    return Err(YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Cannot infer type for variable {} without initializer", name)
+                    }));
                 };
 
                 let alloca = self.create_entry_block_alloca(name, &ty)?;
@@ -529,10 +575,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.add_variable(name, alloca, ty, *is_mut)?;
             }
             Pattern::Tuple(_patterns) => {
-                bail!("Tuple patterns not yet implemented");
+                return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Tuple patterns not yet implemented".to_string(), span: Span::dummy() }));
             }
             Pattern::Struct(_name, _fields) => {
-                bail!("Struct patterns not yet implemented");
+                return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Struct patterns not yet implemented".to_string(), span: Span::dummy() }));
             }
         }
 
@@ -540,41 +586,43 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile an assignment statement
-    fn compile_assignment(&mut self, assign: &AssignStatement) -> Result<()> {
+    fn compile_assignment(&mut self, assign: &AssignStatement) -> YuniResult<()> {
         let value = self.compile_expression(&assign.value)?;
 
         match &assign.target {
             Expression::Identifier(id) => {
                 let symbol = self.get_variable(&id.name)?;
                 if !symbol.is_mutable {
-                    bail!("Cannot assign to immutable variable {}", id.name);
+                    return Err(YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Cannot assign to immutable variable {}", id.name)
+                    }));
                 }
                 self.builder.build_store(symbol.ptr, value)?;
             }
             Expression::Field(field_expr) => {
                 let struct_ptr = self.compile_lvalue(&field_expr.object)?;
-                let field_ptr = self.get_field_pointer(struct_ptr, &field_expr.field)?;
+                let field_ptr = self.get_field_pointer(struct_ptr, field_expr)?;
                 self.builder.build_store(field_ptr, value)?;
             }
             Expression::Index(_index_expr) => {
-                bail!("Array indexing assignment not yet implemented");
+                return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Array indexing assignment not yet implemented".to_string(), span: Span::dummy() }));
             }
             Expression::Dereference(deref_expr) => {
                 let ptr = self.compile_expression(&deref_expr.expr)?;
                 if let BasicValueEnum::PointerValue(ptr_val) = ptr {
                     self.builder.build_store(ptr_val, value)?;
                 } else {
-                    bail!("Cannot dereference non-pointer value");
+                    return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Cannot dereference non-pointer value".to_string(), span: Span::dummy() }));
                 }
             }
-            _ => bail!("Invalid assignment target"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Invalid assignment target".to_string(), span: Span::dummy() })),
         }
 
         Ok(())
     }
 
     /// Compile a return statement
-    fn compile_return(&mut self, ret: &ReturnStatement) -> Result<()> {
+    fn compile_return(&mut self, ret: &ReturnStatement) -> YuniResult<()> {
         if let Some(value) = &ret.value {
             let ret_value = self.compile_expression(value)?;
             self.builder.build_return(Some(&ret_value))?;
@@ -585,12 +633,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile an if statement
-    fn compile_if_statement(&mut self, if_stmt: &IfStatement) -> Result<()> {
+    fn compile_if_statement(&mut self, if_stmt: &IfStatement) -> YuniResult<()> {
         let condition = self.compile_expression(&if_stmt.condition)?;
 
         let function = self
             .current_function
-            .ok_or_else(|| anyhow::anyhow!("No current function"))?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "No current function".to_string() }))?;
 
         let then_block = self.context.append_basic_block(function, "then");
         let else_block = self.context.append_basic_block(function, "else");
@@ -602,7 +650,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.builder
                     .build_conditional_branch(int_val, then_block, else_block)?;
             }
-            _ => bail!("If condition must be a boolean"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "If condition must be a boolean".to_string(), span: Span::dummy() })),
         }
 
         // Compile then branch
@@ -635,10 +683,10 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile a while statement
-    fn compile_while_statement(&mut self, while_stmt: &WhileStatement) -> Result<()> {
+    fn compile_while_statement(&mut self, while_stmt: &WhileStatement) -> YuniResult<()> {
         let function = self
             .current_function
-            .ok_or_else(|| anyhow::anyhow!("No current function"))?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "No current function".to_string() }))?;
 
         let cond_block = self.context.append_basic_block(function, "while.cond");
         let body_block = self.context.append_basic_block(function, "while.body");
@@ -656,7 +704,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.builder
                     .build_conditional_branch(int_val, body_block, exit_block)?;
             }
-            _ => bail!("While condition must be a boolean"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "While condition must be a boolean".to_string(), span: Span::dummy() })),
         }
 
         // Compile body
@@ -673,7 +721,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile a for statement
-    fn compile_for_statement(&mut self, for_stmt: &ForStatement) -> Result<()> {
+    fn compile_for_statement(&mut self, for_stmt: &ForStatement) -> YuniResult<()> {
         // Create new scope for loop variables
         self.push_scope();
 
@@ -684,7 +732,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         let function = self
             .current_function
-            .ok_or_else(|| anyhow::anyhow!("No current function"))?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "No current function".to_string() }))?;
 
         let cond_block = self.context.append_basic_block(function, "for.cond");
         let body_block = self.context.append_basic_block(function, "for.body");
@@ -703,7 +751,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.builder
                         .build_conditional_branch(int_val, body_block, exit_block)?;
                 }
-                _ => bail!("For condition must be a boolean"),
+                _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "For condition must be a boolean".to_string(), span: Span::dummy() })),
             }
         } else {
             // No condition means infinite loop
@@ -734,7 +782,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile an expression
-    fn compile_expression(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_expression(&mut self, expr: &Expression) -> YuniResult<BasicValueEnum<'ctx>> {
         match expr {
             Expression::Integer(lit) => self.compile_integer_literal(lit),
             Expression::Float(lit) => self.compile_float_literal(lit),
@@ -761,7 +809,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile integer literal
-    fn compile_integer_literal(&self, lit: &IntegerLit) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_integer_literal(&self, lit: &IntegerLit) -> YuniResult<BasicValueEnum<'ctx>> {
         let int_type = if let Some(suffix) = &lit.suffix {
             match suffix.as_str() {
                 "i8" => self.context.i8_type(),
@@ -784,7 +832,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile float literal
-    fn compile_float_literal(&self, lit: &FloatLit) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_float_literal(&self, lit: &FloatLit) -> YuniResult<BasicValueEnum<'ctx>> {
         let float_type = if let Some(suffix) = &lit.suffix {
             match suffix.as_str() {
                 "f32" => self.context.f32_type(),
@@ -799,22 +847,29 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile string literal
-    fn compile_string_literal(&self, lit: &StringLit) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_string_literal(&self, lit: &StringLit) -> YuniResult<BasicValueEnum<'ctx>> {
         let string_const = self.context.const_string(lit.value.as_bytes(), true);
         let global = self.module.add_global(string_const.get_type(), None, "str");
         global.set_initializer(&string_const);
         global.set_constant(true);
 
+        // 文字列配列の要素へのポインタを安全に取得
+        // この操作は安全であるため、unsafeブロックは必要最小限に留める
+        let array_type = self.context
+            .i8_type()
+            .array_type(lit.value.len() as u32 + 1);
+        let indices = [
+            self.context.i32_type().const_zero(),
+            self.context.i32_type().const_zero(),
+        ];
+        
         let ptr = unsafe {
+            // SAFETY: グローバル文字列定数への境界内GEP操作は安全
+            // インデックスは配列の境界内を指しており、型も適切に設定されている
             self.builder.build_in_bounds_gep(
-                self.context
-                    .i8_type()
-                    .array_type(lit.value.len() as u32 + 1),
+                array_type,
                 global.as_pointer_value(),
-                &[
-                    self.context.i32_type().const_zero(),
-                    self.context.i32_type().const_zero(),
-                ],
+                &indices,
                 "str_ptr",
             )?
         };
@@ -823,7 +878,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile template string with interpolation
-    fn compile_template_string(&mut self, lit: &TemplateStringLit) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_template_string(&mut self, lit: &TemplateStringLit) -> YuniResult<BasicValueEnum<'ctx>> {
         if lit.parts.is_empty() {
             return self.compile_string_literal(&StringLit {
                 value: String::new(),
@@ -849,23 +904,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let concat_fn = self
                     .runtime_functions
                     .get("yuni_string_concat")
-                    .ok_or_else(|| anyhow::anyhow!("String concat function not found"))?;
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "String concat function not found".to_string() }))?;
 
                 self.builder
                     .build_call(*concat_fn, &[prev.into(), part_str.into()], "concat")?
                     .try_as_basic_value()
                     .left()
-                    .ok_or_else(|| anyhow::anyhow!("String concat should return a value"))?
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "String concat should return a value".to_string() }))?
             } else {
                 part_str
             });
         }
 
-        result.ok_or_else(|| anyhow::anyhow!("Empty template string"))
+        result.ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "Empty template string".to_string() }))
     }
 
     /// Convert a value to string
-    fn value_to_string(&mut self, value: BasicValueEnum<'ctx>) -> Result<BasicValueEnum<'ctx>> {
+    fn value_to_string(&mut self, value: BasicValueEnum<'ctx>) -> YuniResult<BasicValueEnum<'ctx>> {
         match value {
             BasicValueEnum::IntValue(int_val) => {
                 // Check if this is a boolean (i1 type)
@@ -873,20 +928,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                     let to_string_fn = self
                         .runtime_functions
                         .get("yuni_bool_to_string")
-                        .ok_or_else(|| anyhow::anyhow!("bool to string function not found"))?;
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "bool to string function not found".to_string() }))?;
 
                     Ok(self
                         .builder
                         .build_call(*to_string_fn, &[int_val.into()], "to_string")?
                         .try_as_basic_value()
                         .left()
-                        .ok_or_else(|| anyhow::anyhow!("to_string should return a value"))?)
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "to_string should return a value".to_string() }))?)
                 } else {
                     // Integer types
                     let to_string_fn = self
                         .runtime_functions
                         .get("yuni_i64_to_string")
-                        .ok_or_else(|| anyhow::anyhow!("i64 to string function not found"))?;
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "i64 to string function not found".to_string() }))?;
 
                     let i64_val = if int_val.get_type().get_bit_width() != 64 {
                         self.builder
@@ -900,14 +955,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .build_call(*to_string_fn, &[i64_val.into()], "to_string")?
                         .try_as_basic_value()
                         .left()
-                        .ok_or_else(|| anyhow::anyhow!("to_string should return a value"))?)
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "to_string should return a value".to_string() }))?)
                 }
             }
             BasicValueEnum::FloatValue(float_val) => {
                 let to_string_fn = self
                     .runtime_functions
                     .get("yuni_f64_to_string")
-                    .ok_or_else(|| anyhow::anyhow!("f64 to string function not found"))?;
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "f64 to string function not found".to_string() }))?;
 
                 let f64_val = if float_val.get_type() != self.context.f64_type() {
                     self.builder
@@ -921,18 +976,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .build_call(*to_string_fn, &[f64_val.into()], "to_string")?
                     .try_as_basic_value()
                     .left()
-                    .ok_or_else(|| anyhow::anyhow!("to_string should return a value"))?)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "to_string should return a value".to_string() }))?)
             }
             BasicValueEnum::PointerValue(_) => {
                 // Already a string
                 Ok(value)
             }
-            _ => bail!("Cannot convert value to string"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Cannot convert value to string".to_string(), span: Span::dummy() })),
         }
     }
 
     /// Compile boolean literal
-    fn compile_boolean_literal(&self, lit: &BooleanLit) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_boolean_literal(&self, lit: &BooleanLit) -> YuniResult<BasicValueEnum<'ctx>> {
         Ok(self
             .context
             .bool_type()
@@ -941,7 +996,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile identifier
-    fn compile_identifier(&mut self, id: &Identifier) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_identifier(&mut self, id: &Identifier) -> YuniResult<BasicValueEnum<'ctx>> {
         let symbol = self.get_variable(&id.name)?;
         let value =
             self.builder
@@ -950,7 +1005,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile path expression
-    fn compile_path(&mut self, path: &PathExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_path(&mut self, path: &PathExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         if path.segments.len() == 1 {
             // Simple identifier
             self.compile_identifier(&Identifier {
@@ -958,12 +1013,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 span: path.span,
             })
         } else {
-            bail!("Path expressions not yet fully implemented");
+            return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Path expressions not yet fully implemented".to_string(), span: Span::dummy() }));
         }
     }
 
     /// Compile binary expression
-    fn compile_binary_expr(&mut self, binary: &BinaryExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_binary_expr(&mut self, binary: &BinaryExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         let left = self.compile_expression(&binary.left)?;
         let right = self.compile_expression(&binary.right)?;
 
@@ -1001,7 +1056,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     BinaryOp::And => self.builder.build_and(*lhs, *rhs, "and")?,
                     BinaryOp::Or => self.builder.build_or(*lhs, *rhs, "or")?,
-                    _ => bail!("Invalid operator for integers"),
+                    _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Invalid operator for integers".to_string(), span: Span::dummy() })),
                 };
                 Ok(result.into())
             }
@@ -1035,14 +1090,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .builder
                     .build_float_compare(FloatPredicate::OGE, *lhs, *rhs, "ge")?
                     .into()),
-                _ => bail!("Invalid operator for floats"),
+                _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Invalid operator for floats".to_string(), span: Span::dummy() })),
             },
-            _ => bail!("Type mismatch in binary expression"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Type mismatch in binary expression".to_string(), span: Span::dummy() })),
         }
     }
 
     /// Compile unary expression
-    fn compile_unary_expr(&mut self, unary: &UnaryExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_unary_expr(&mut self, unary: &UnaryExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         let operand = self.compile_expression(&unary.operand)?;
 
         match unary.op {
@@ -1050,7 +1105,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 BasicValueEnum::IntValue(int_val) => {
                     Ok(self.builder.build_not(int_val, "not")?.into())
                 }
-                _ => bail!("Not operator requires boolean operand"),
+                _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Not operator requires boolean operand".to_string(), span: Span::dummy() })),
             },
             UnaryOp::Negate => match operand {
                 BasicValueEnum::IntValue(int_val) => {
@@ -1059,13 +1114,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                 BasicValueEnum::FloatValue(float_val) => {
                     Ok(self.builder.build_float_neg(float_val, "neg")?.into())
                 }
-                _ => bail!("Negate operator requires numeric operand"),
+                _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Negate operator requires numeric operand".to_string(), span: Span::dummy() })),
             },
         }
     }
 
     /// Compile function call
-    fn compile_call_expr(&mut self, call: &CallExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_call_expr(&mut self, call: &CallExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         // Handle built-in functions
         if let Expression::Identifier(id) = &*call.callee {
             if id.name == "println" {
@@ -1078,27 +1133,27 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Identifier(id) => self
                 .functions
                 .get(&id.name)
-                .ok_or_else(|| anyhow::anyhow!("Function {} not found", id.name))?
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: format!("Function {} not found", id.name) }))?
                 .clone(),
-            _ => bail!("Complex function calls not yet implemented"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Complex function calls not yet implemented".to_string(), span: Span::dummy() })),
         };
 
         let args: Vec<BasicMetadataValueEnum> = call
             .args
             .iter()
             .map(|arg| Ok(self.compile_expression(arg)?.into()))
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<YuniResult<Vec<_>>>()?;
 
         let call_value = self.builder.build_call(function, &args, "call")?;
 
         call_value
             .try_as_basic_value()
             .left()
-            .ok_or_else(|| anyhow::anyhow!("Function should return a value"))
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "Function should return a value".to_string() }))
     }
 
     /// Compile println built-in
-    fn compile_println_call(&mut self, call: &CallExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_println_call(&mut self, call: &CallExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         if call.args.is_empty() {
             // Print empty line
             let empty_str = self.compile_string_literal(&StringLit {
@@ -1109,7 +1164,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             let println_fn = self
                 .runtime_functions
                 .get("yuni_println")
-                .ok_or_else(|| anyhow::anyhow!("println function not found"))?;
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "println function not found".to_string() }))?;
 
             self.builder
                 .build_call(*println_fn, &[empty_str.into()], "println")?;
@@ -1131,21 +1186,21 @@ impl<'ctx> CodeGenerator<'ctx> {
                     let concat_fn = self
                         .runtime_functions
                         .get("yuni_string_concat")
-                        .ok_or_else(|| anyhow::anyhow!("String concat function not found"))?;
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "String concat function not found".to_string() }))?;
 
                     // Concatenate previous result with space
                     let with_space = self.builder
                         .build_call(*concat_fn, &[prev.into(), space_str.into()], "concat_space")?
                         .try_as_basic_value()
                         .left()
-                        .ok_or_else(|| anyhow::anyhow!("concat should return a value"))?;
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "concat should return a value".to_string() }))?;
 
                     // Then concatenate with the current string value
                     self.builder
                         .build_call(*concat_fn, &[with_space.into(), str_value.into()], "concat")?
                         .try_as_basic_value()
                         .left()
-                        .ok_or_else(|| anyhow::anyhow!("concat should return a value"))?
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "concat should return a value".to_string() }))?
                 } else {
                     str_value
                 });
@@ -1155,7 +1210,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let println_fn = self
                     .runtime_functions
                     .get("yuni_println")
-                    .ok_or_else(|| anyhow::anyhow!("println function not found"))?;
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "println function not found".to_string() }))?;
 
                 self.builder
                     .build_call(*println_fn, &[final_str.into()], "println")?;
@@ -1170,7 +1225,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn compile_method_call(
         &mut self,
         method_call: &MethodCallExpr,
-    ) -> Result<BasicValueEnum<'ctx>> {
+    ) -> YuniResult<BasicValueEnum<'ctx>> {
         let receiver = self.compile_expression(&method_call.receiver)?;
         let receiver_type = self.infer_type(&method_call.receiver)?;
 
@@ -1180,17 +1235,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if let Type::UserDefined(name) = inner.as_ref() {
                     name
                 } else {
-                    bail!("Invalid receiver type for method call")
+                    return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Invalid receiver type for method call".to_string(), span: Span::dummy() }))
                 }
             }
-            _ => bail!("Invalid receiver type for method call"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Invalid receiver type for method call".to_string(), span: Span::dummy() })),
         };
 
         let method_name = format!("{}_{}", type_name, method_call.method);
         let function = self
             .functions
             .get(&method_name)
-            .ok_or_else(|| anyhow::anyhow!("Method {} not found", method_name))?
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: format!("Method {} not found", method_name) }))?
             .clone();
 
         let mut args: Vec<BasicMetadataValueEnum> = vec![receiver.into()];
@@ -1198,10 +1253,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             method_call
                 .args
                 .iter()
-                .map(|arg| -> Result<BasicMetadataValueEnum> {
+                .map(|arg| -> YuniResult<BasicMetadataValueEnum> {
                     Ok(self.compile_expression(arg)?.into())
                 })
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<YuniResult<Vec<_>>>()?,
         );
 
         let call_value = self.builder.build_call(function, &args, "method_call")?;
@@ -1209,18 +1264,18 @@ impl<'ctx> CodeGenerator<'ctx> {
         call_value
             .try_as_basic_value()
             .left()
-            .ok_or_else(|| anyhow::anyhow!("Method should return a value"))
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "Method should return a value".to_string() }))
     }
 
     /// Compile index expression
-    fn compile_index_expr(&mut self, _index: &IndexExpr) -> Result<BasicValueEnum<'ctx>> {
-        bail!("Array indexing not yet implemented")
+    fn compile_index_expr(&mut self, _index: &IndexExpr) -> YuniResult<BasicValueEnum<'ctx>> {
+        return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Array indexing not yet implemented".to_string(), span: Span::dummy() }))
     }
 
     /// Compile field access
-    fn compile_field_expr(&mut self, field: &FieldExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_field_expr(&mut self, field: &FieldExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         let struct_ptr = self.compile_lvalue(&field.object)?;
-        let field_ptr = self.get_field_pointer(struct_ptr, &field.field)?;
+        let field_ptr = self.get_field_pointer(struct_ptr, field)?;
 
         let field_type = self.get_field_type(&field.object, &field.field)?;
         let value =
@@ -1231,7 +1286,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile reference expression
-    fn compile_reference_expr(&mut self, ref_expr: &ReferenceExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_reference_expr(&mut self, ref_expr: &ReferenceExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         let ptr = self.compile_lvalue(&ref_expr.expr)?;
         Ok(ptr.into())
     }
@@ -1240,7 +1295,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn compile_dereference_expr(
         &mut self,
         deref: &DereferenceExpr,
-    ) -> Result<BasicValueEnum<'ctx>> {
+    ) -> YuniResult<BasicValueEnum<'ctx>> {
         let ptr = self.compile_expression(&deref.expr)?;
 
         if let BasicValueEnum::PointerValue(ptr_val) = ptr {
@@ -1250,16 +1305,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .build_load(self.get_llvm_type(&pointee_type)?, ptr_val, "deref")?;
             Ok(value)
         } else {
-            bail!("Cannot dereference non-pointer value")
+            return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Cannot dereference non-pointer value".to_string(), span: Span::dummy() }))
         }
     }
 
     /// Compile struct literal
-    fn compile_struct_literal(&mut self, lit: &StructLit) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_struct_literal(&mut self, lit: &StructLit) -> YuniResult<BasicValueEnum<'ctx>> {
         let struct_type = *self
             .types
             .get(&lit.ty)
-            .ok_or_else(|| anyhow::anyhow!("Struct type {} not found", lit.ty))?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: format!("Struct type {} not found", lit.ty) }))?;
 
         let mut values = vec![];
         for field in &lit.fields {
@@ -1275,22 +1330,22 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn compile_enum_variant(
         &mut self,
         _enum_var: &EnumVariantExpr,
-    ) -> Result<BasicValueEnum<'ctx>> {
-        bail!("Enum variants not yet implemented")
+    ) -> YuniResult<BasicValueEnum<'ctx>> {
+        return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Enum variants not yet implemented".to_string(), span: Span::dummy() }))
     }
 
     /// Compile array expression
-    fn compile_array_expr(&mut self, _array: &ArrayExpr) -> Result<BasicValueEnum<'ctx>> {
-        bail!("Arrays not yet implemented")
+    fn compile_array_expr(&mut self, _array: &ArrayExpr) -> YuniResult<BasicValueEnum<'ctx>> {
+        return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Arrays not yet implemented".to_string(), span: Span::dummy() }))
     }
 
     /// Compile tuple expression
-    fn compile_tuple_expr(&mut self, _tuple: &TupleExpr) -> Result<BasicValueEnum<'ctx>> {
-        bail!("Tuples not yet implemented")
+    fn compile_tuple_expr(&mut self, _tuple: &TupleExpr) -> YuniResult<BasicValueEnum<'ctx>> {
+        return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Tuples not yet implemented".to_string(), span: Span::dummy() }))
     }
 
     /// Compile cast expression
-    fn compile_cast_expr(&mut self, cast: &CastExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_cast_expr(&mut self, cast: &CastExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         let value = self.compile_expression(&cast.expr)?;
         let target_type = self.get_llvm_type(&cast.ty)?;
 
@@ -1328,11 +1383,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .build_float_to_signed_int(float_val, target_int, "fptosi")?;
                 Ok(result.into())
             }
-            _ => bail!("Invalid cast"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Invalid cast".to_string(), span: Span::dummy() })),
         }
     }
 
-    fn compile_assignment_expr(&mut self, assign: &AssignmentExpr) -> Result<BasicValueEnum<'ctx>> {
+    fn compile_assignment_expr(&mut self, assign: &AssignmentExpr) -> YuniResult<BasicValueEnum<'ctx>> {
         // Get the pointer to the target location
         let target_ptr = self.compile_lvalue(&assign.target)?;
 
@@ -1347,7 +1402,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Compile an lvalue (returns pointer)
-    fn compile_lvalue(&mut self, expr: &Expression) -> Result<PointerValue<'ctx>> {
+    fn compile_lvalue(&mut self, expr: &Expression) -> YuniResult<PointerValue<'ctx>> {
         match expr {
             Expression::Identifier(id) => {
                 let symbol = self.get_variable(&id.name)?;
@@ -1355,39 +1410,128 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Field(field_expr) => {
                 let struct_ptr = self.compile_lvalue(&field_expr.object)?;
-                self.get_field_pointer(struct_ptr, &field_expr.field)
+                self.get_field_pointer(struct_ptr, field_expr)
             }
             Expression::Dereference(deref) => {
                 let ptr = self.compile_expression(&deref.expr)?;
                 if let BasicValueEnum::PointerValue(ptr_val) = ptr {
                     Ok(ptr_val)
                 } else {
-                    bail!("Cannot get lvalue of non-pointer")
+                    return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Cannot get lvalue of non-pointer".to_string(), span: Span::dummy() }))
                 }
             }
-            _ => bail!("Expression is not an lvalue"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Expression is not an lvalue".to_string(), span: Span::dummy() })),
         }
     }
 
     /// Get pointer to struct field
     fn get_field_pointer(
         &mut self,
-        _struct_ptr: PointerValue<'ctx>,
-        _field_name: &str,
-    ) -> Result<PointerValue<'ctx>> {
-        // TODO: Look up field index and struct type from type information
-        // For now, this is a placeholder that won't work correctly
-        bail!("Field access not yet implemented for LLVM 15+ (opaque pointers)")
+        struct_ptr: PointerValue<'ctx>,
+        field_expr: &FieldExpr,
+    ) -> YuniResult<PointerValue<'ctx>> {
+        // 構造体の型を推論
+        let struct_type = self.infer_type(&field_expr.object)?;
+        
+        // 参照の場合はデリファレンス
+        let actual_struct_type = match &struct_type {
+            Type::Reference(inner, _) => inner.as_ref(),
+            _ => &struct_type,
+        };
+        
+        let struct_name = match actual_struct_type {
+            Type::UserDefined(name) => name,
+            _ => return Err(YuniError::Codegen(CodegenError::TypeError { 
+                expected: "struct type".to_string(), 
+                actual: format!("{:?}", actual_struct_type),
+                span: field_expr.span 
+            })),
+        };
+        
+        // 構造体情報を取得
+        let struct_info = self.struct_info.get(struct_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined { 
+                name: struct_name.clone(), 
+                span: field_expr.span 
+            }))?;
+        
+        // フィールドインデックスを取得
+        let field_index = *struct_info.field_indices.get(&field_expr.field)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined { 
+                name: format!("{}.{}", struct_name, field_expr.field), 
+                span: field_expr.span 
+            }))?;
+        
+        // LLVM構造体型を取得
+        let llvm_struct_type = self.types.get(struct_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined { 
+                name: struct_name.clone(), 
+                span: field_expr.span 
+            }))?;
+        
+        // LLVM 18のオペークポインタに対応したGEP命令を生成
+        // build_struct_gepは使用せず、明示的に型を指定してGEPを使用
+        let indices = [
+            self.context.i32_type().const_int(0, false),
+            self.context.i32_type().const_int(field_index as u64, false),
+        ];
+        
+        let field_ptr = unsafe {
+            self.builder.build_gep(
+                *llvm_struct_type,
+                struct_ptr,
+                &indices,
+                &format!("{}_field_{}_ptr", struct_name, field_expr.field),
+            )
+        }
+        .map_err(|_| YuniError::Codegen(CodegenError::CompilationFailed { 
+            message: format!("Failed to build GEP for field {}.{}", struct_name, field_expr.field),
+            span: field_expr.span 
+        }))?;
+        
+        Ok(field_ptr)
     }
 
     /// Get type of struct field
-    fn get_field_type(&self, _struct_expr: &Expression, _field_name: &str) -> Result<Type> {
-        // TODO: Implement proper type lookup
-        bail!("Field type lookup not yet implemented")
+    fn get_field_type(&self, struct_expr: &Expression, field_name: &str) -> YuniResult<Type> {
+        // 構造体の型を推論
+        let struct_type = self.infer_type(struct_expr)?;
+        
+        // 参照の場合はデリファレンス
+        let actual_struct_type = match &struct_type {
+            Type::Reference(inner, _) => inner.as_ref(),
+            _ => &struct_type,
+        };
+        
+        let struct_name = match actual_struct_type {
+            Type::UserDefined(name) => name,
+            _ => return Err(YuniError::Codegen(CodegenError::TypeError { 
+                expected: "struct type".to_string(), 
+                actual: format!("{:?}", actual_struct_type),
+                span: Span::dummy() 
+            })),
+        };
+        
+        // 構造体情報を取得
+        let struct_info = self.struct_info.get(struct_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined { 
+                name: struct_name.clone(), 
+                span: Span::dummy() 
+            }))?;
+        
+        // フィールドインデックスを取得
+        let field_index = *struct_info.field_indices.get(field_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined { 
+                name: format!("{}.{}", struct_name, field_name), 
+                span: Span::dummy() 
+            }))?;
+        
+        // フィールドの型を返す
+        Ok(struct_info.field_types[field_index as usize].clone())
     }
 
     /// Infer type of expression
-    fn infer_type(&self, expr: &Expression) -> Result<Type> {
+    fn infer_type(&self, expr: &Expression) -> YuniResult<Type> {
         match expr {
             Expression::Integer(lit) => {
                 if let Some(suffix) = &lit.suffix {
@@ -1430,21 +1574,27 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let inner_type = self.infer_type(&ref_expr.expr)?;
                 Ok(Type::Reference(Box::new(inner_type), ref_expr.is_mut))
             }
-            _ => bail!("Type inference not implemented for this expression"),
+            Expression::Field(field_expr) => {
+                self.get_field_type(&field_expr.object, &field_expr.field)
+            }
+            Expression::StructLit(struct_lit) => {
+                Ok(Type::UserDefined(struct_lit.ty.clone()))
+            }
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Type inference not implemented for this expression".to_string(), span: Span::dummy() })),
         }
     }
 
     /// Infer pointee type for dereference
-    fn infer_pointee_type(&self, expr: &Expression) -> Result<Type> {
+    fn infer_pointee_type(&self, expr: &Expression) -> YuniResult<Type> {
         let ptr_type = self.infer_type(expr)?;
         match ptr_type {
             Type::Reference(inner, _) => Ok(*inner),
-            _ => bail!("Cannot dereference non-reference type"),
+            _ => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Cannot dereference non-reference type".to_string(), span: Span::dummy() })),
         }
     }
 
     /// Get LLVM type from AST type
-    fn get_llvm_type(&self, ty: &Type) -> Result<BasicTypeEnum<'ctx>> {
+    fn get_llvm_type(&self, ty: &Type) -> YuniResult<BasicTypeEnum<'ctx>> {
         match ty {
             Type::I8 => Ok(self.context.i8_type().into()),
             Type::I16 => Ok(self.context.i16_type().into()),
@@ -1458,13 +1608,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             Type::U64 => Ok(self.context.i64_type().into()),
             Type::U128 => Ok(self.context.i128_type().into()),
             Type::U256 => Ok(self.context.custom_width_int_type(256).into()),
-            Type::F8 => bail!("f8 not supported by LLVM"),
+            Type::F8 => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "f8 not supported by LLVM".to_string(), span: Span::dummy() })),
             Type::F16 => Ok(self.context.f16_type().into()),
             Type::F32 => Ok(self.context.f32_type().into()),
             Type::F64 => Ok(self.context.f64_type().into()),
             Type::Bool => Ok(self.context.bool_type().into()),
             Type::String => Ok(self.context.ptr_type(AddressSpace::default()).into()),
-            Type::Void => bail!("Void type cannot be used as a value type"),
+            Type::Void => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Void type cannot be used as a value type".to_string(), span: Span::dummy() })),
             Type::Reference(inner, _) => {
                 let _inner_type = self.get_llvm_type(inner)?;
                 Ok(self.context.ptr_type(AddressSpace::default()).into())
@@ -1478,29 +1628,31 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let field_types: Vec<BasicTypeEnum> = types
                     .iter()
                     .map(|t| self.get_llvm_type(t))
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect::<YuniResult<Vec<_>>>()?;
                 Ok(self.context.struct_type(&field_types, false).into())
             }
-            Type::Function(_) => bail!("Function types not yet implemented"),
+            Type::Function(_) => return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "Function types not yet implemented".to_string(), span: Span::dummy() })),
             Type::UserDefined(name) => self
                 .types
                 .get(name)
                 .map(|t| (*t).into())
-                .ok_or_else(|| anyhow::anyhow!("Type {} not found", name)),
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { 
+                    message: format!("Type {} not found", name) 
+                })),
         }
     }
 
     /// Create an alloca instruction in the entry block
-    fn create_entry_block_alloca(&self, name: &str, ty: &Type) -> Result<PointerValue<'ctx>> {
+    fn create_entry_block_alloca(&self, name: &str, ty: &Type) -> YuniResult<PointerValue<'ctx>> {
         let builder = self.context.create_builder();
 
         let function = self
             .current_function
-            .ok_or_else(|| anyhow::anyhow!("No current function"))?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "No current function".to_string() }))?;
 
         let entry = function
             .get_first_basic_block()
-            .ok_or_else(|| anyhow::anyhow!("No entry block"))?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { message: "No entry block".to_string() }))?;
 
         match entry.get_first_instruction() {
             Some(first_inst) => builder.position_before(&first_inst),
@@ -1536,9 +1688,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         ptr: PointerValue<'ctx>,
         ty: Type,
         is_mutable: bool,
-    ) -> Result<()> {
+    ) -> YuniResult<()> {
         let symbol = Symbol {
-            ptr: unsafe { std::mem::transmute(ptr) },
+            ptr,
             ty,
             is_mutable,
         };
@@ -1547,18 +1699,20 @@ impl<'ctx> CodeGenerator<'ctx> {
             scope.symbols.insert(name.to_string(), symbol);
             Ok(())
         } else {
-            bail!("No active scope")
+            return Err(YuniError::Codegen(CodegenError::Unimplemented { feature: "No active scope".to_string(), span: Span::dummy() }))
         }
     }
 
     /// Get a variable from any scope
-    fn get_variable(&self, name: &str) -> Result<Symbol> {
+    fn get_variable(&self, name: &str) -> YuniResult<Symbol<'ctx>> {
         for scope in self.scopes.iter().rev() {
             if let Some(symbol) = scope.symbols.get(name) {
                 return Ok(symbol.clone());
             }
         }
-        bail!("Variable {} not found", name)
+        Err(YuniError::Codegen(CodegenError::Internal {
+            message: format!("Variable {} not found", name)
+        }))
     }
 
     /// Optimize the module
@@ -1568,20 +1722,26 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Write LLVM IR to file
-    pub fn write_llvm_ir(&self, path: &Path) -> Result<()> {
+    pub fn write_llvm_ir(&self, path: &Path) -> YuniResult<()> {
         self.module
             .print_to_file(path)
-            .map_err(|e| anyhow::anyhow!("Failed to write LLVM IR: {}", e))
+            .map_err(|e| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Failed to write LLVM IR: {}", e)
+            }))
     }
 
     /// Write object file
-    pub fn write_object_file(&self, path: &Path, opt_level: OptimizationLevel) -> Result<()> {
+    pub fn write_object_file(&self, path: &Path, opt_level: OptimizationLevel) -> YuniResult<()> {
         Target::initialize_native(&Default::default())
-            .map_err(|e| anyhow::anyhow!("Failed to initialize native target: {}", e))?;
+            .map_err(|e| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Failed to initialize native target: {}", e)
+            }))?;
 
         let target_triple = TargetMachine::get_default_triple();
         let target = Target::from_triple(&target_triple)
-            .map_err(|e| anyhow::anyhow!("Failed to get target: {}", e))?;
+            .map_err(|e| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Failed to get target: {}", e)
+            }))?;
 
         let target_machine = target
             .create_target_machine(
@@ -1592,11 +1752,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                 RelocMode::PIC,
                 CodeModel::Default,
             )
-            .context("Failed to create target machine")?;
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "Failed to create target machine".to_string()
+            }))?;
 
         target_machine
             .write_to_file(&self.module, FileType::Object, path)
-            .map_err(|e| anyhow::anyhow!("Failed to write object file: {}", e))
+            .map_err(|e| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Failed to write object file: {}", e)
+            }))
     }
 }
 
