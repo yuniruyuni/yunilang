@@ -149,7 +149,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map(|param| self.type_manager.ast_type_to_metadata(&param.ty))
             .collect::<YuniResult<Vec<_>>>()?;
 
-        let return_type = func.return_type.as_ref().unwrap_or(&Type::Void);
+        let return_type = func.return_type.as_ref().map(|t| &**t).unwrap_or(&Type::Void);
         let fn_type = self.type_manager.create_function_type(&[], return_type, false)?;
 
         let function = self.module.add_function(&func.name, fn_type, None);
@@ -186,7 +186,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             param_types.push(self.type_manager.ast_type_to_metadata(&param.ty)?);
         }
 
-        let return_type = method.return_type.as_ref().unwrap_or(&Type::Void);
+        let return_type = method.return_type.as_ref().map(|t| &**t).unwrap_or(&Type::Void);
         let fn_type = self.type_manager.create_function_type(
             &method.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>(),
             return_type,

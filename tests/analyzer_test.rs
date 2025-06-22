@@ -13,7 +13,7 @@ mod tests {
     /// ソースコードを解析してASTを取得し、セマンティック解析を実行するヘルパー関数
     fn analyze_source(source: &str) -> Result<Program, AnalysisError> {
         let lexer = Lexer::new(source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
         let mut parser = Parser::new(tokens);
         let ast = parser.parse().expect("Parsing should succeed");
         

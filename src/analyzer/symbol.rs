@@ -1,7 +1,7 @@
 //! シンボルテーブルおよび関連するデータ構造
 
 use crate::ast::{Field, LivesClause, Span, Type, Variant};
-use crate::error::{AnalyzerError, YuniResult};
+use crate::error::AnalyzerError;
 use std::collections::HashMap;
 
 pub type AnalysisError = AnalyzerError;

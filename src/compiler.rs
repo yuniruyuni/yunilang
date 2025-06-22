@@ -128,7 +128,7 @@ impl<'ctx> CompilationPipeline<'ctx> {
         }
 
         let lexer = Lexer::new(&self.state.source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
 
         // レキサーエラーをチェック
         for token in &tokens {

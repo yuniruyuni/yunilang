@@ -29,8 +29,8 @@ fn main() {
 "#;
 
     // レクサー
-    let mut lexer = Lexer::new(input);
-    let tokens: Vec<TokenWithPosition> = lexer.collect();
+    let lexer = Lexer::new(input);
+    let tokens: Vec<TokenWithPosition> = lexer.collect_tokens();
     
     // パーサー
     let mut parser = Parser::new(tokens);
@@ -86,8 +86,8 @@ fn main() {
 "#;
 
     // レクサー
-    let mut lexer = Lexer::new(input);
-    let tokens: Vec<TokenWithPosition> = lexer.collect();
+    let lexer = Lexer::new(input);
+    let tokens: Vec<TokenWithPosition> = lexer.collect_tokens();
     
     // パーサー
     let mut parser = Parser::new(tokens);
@@ -127,8 +127,8 @@ fn main() {
 "#;
 
     // レクサー
-    let mut lexer = Lexer::new(input);
-    let tokens: Vec<TokenWithPosition> = lexer.collect();
+    let lexer = Lexer::new(input);
+    let tokens: Vec<TokenWithPosition> = lexer.collect_tokens();
     
     // パーサー
     let mut parser = Parser::new(tokens);
@@ -179,8 +179,8 @@ fn main() {
 "#;
 
     // レクサー
-    let mut lexer = Lexer::new(input);
-    let tokens: Vec<TokenWithPosition> = lexer.collect();
+    let lexer = Lexer::new(input);
+    let tokens: Vec<TokenWithPosition> = lexer.collect_tokens();
     
     // パーサー
     let mut parser = Parser::new(tokens);
@@ -218,8 +218,8 @@ fn main() {
 }
 "#;
 
-    let mut lexer = Lexer::new(input);
-    let tokens: Vec<TokenWithPosition> = lexer.collect();
+    let lexer = Lexer::new(input);
+    let tokens: Vec<TokenWithPosition> = lexer.collect_tokens();
     
     let mut parser = Parser::new(tokens);
     let ast = parser.parse().expect("Parsing failed");
@@ -254,8 +254,8 @@ fn main() {
 "#;
 
     // レクサー
-    let mut lexer = Lexer::new(input);
-    let tokens: Vec<TokenWithPosition> = lexer.collect();
+    let lexer = Lexer::new(input);
+    let tokens: Vec<TokenWithPosition> = lexer.collect_tokens();
     
     // パーサー
     let mut parser = Parser::new(tokens);

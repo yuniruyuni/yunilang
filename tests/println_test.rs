@@ -19,7 +19,7 @@ mod tests {
 
         // Lex the source
         let lexer = Lexer::new(source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
 
         // Parse the tokens
         let mut parser = Parser::new(tokens);
@@ -53,7 +53,7 @@ mod tests {
 
         // Lex the source
         let lexer = Lexer::new(source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
 
         // Parse the tokens
         let mut parser = Parser::new(tokens);
@@ -76,7 +76,7 @@ mod tests {
 
         // Lex the source
         let lexer = Lexer::new(source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
 
         // Parse the tokens
         let mut parser = Parser::new(tokens);

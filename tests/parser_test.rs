@@ -12,7 +12,7 @@ mod tests {
     /// ソースコードを解析してASTを取得するヘルパー関数
     fn parse_source(source: &str) -> Result<Program, ParseError> {
         let lexer = Lexer::new(source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
         let mut parser = Parser::new(tokens);
         parser.parse()
     }
@@ -103,7 +103,7 @@ mod tests {
             
             assert!(func.return_type.is_some());
             if let Some(ref ret_type) = func.return_type {
-                assert!(matches!(ret_type, Type::I32));
+                assert!(matches!(**ret_type, Type::I32));
             }
         }
     }
@@ -118,7 +118,7 @@ mod tests {
             let x: i32 = 42;
             let mut y: f64 = 3.14;
             let z = "hello";
-            let flag = true;
+            let flag = true; // true/falseはToken::True/Token::Falseとして認識される
         }
         "#;
         

@@ -1,11 +1,11 @@
 //! セマンティック解析器のメイン実装
 
 use crate::ast::*;
-use crate::error::{AnalyzerError, ErrorCollector, YuniError, YuniResult};
+use crate::error::ErrorCollector;
 use std::collections::HashMap;
 
 use super::borrow_checker::BorrowChecker;
-use super::lifetime::{LifetimeContext, UsageKind};
+use super::lifetime::LifetimeContext;
 use super::symbol::{AnalysisError, AnalysisResult, FunctionSignature, Scope, Symbol, TypeInfo, TypeKind};
 use super::type_checker::TypeChecker;
 
@@ -148,7 +148,7 @@ impl SemanticAnalyzer {
         let func_sig = FunctionSignature {
             name: func.name.clone(),
             params: func.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
-            return_type: func.return_type.as_ref().cloned().unwrap_or(Type::Void),
+            return_type: func.return_type.as_ref().map(|t| (**t).clone()).unwrap_or(Type::Void),
             lives_clause: func.lives_clause.clone(),
             is_method: false,
             receiver_type: None,
@@ -177,7 +177,7 @@ impl SemanticAnalyzer {
             let func_sig = FunctionSignature {
                 name: method.name.clone(),
                 params: method.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
-                return_type: method.return_type.as_ref().cloned().unwrap_or(Type::Void),
+                return_type: method.return_type.as_ref().map(|t| (**t).clone()).unwrap_or(Type::Void),
                 lives_clause: method.lives_clause.clone(),
                 is_method: true,
                 receiver_type: Some(method.receiver.ty.clone()),
@@ -193,7 +193,7 @@ impl SemanticAnalyzer {
     fn analyze_function(&mut self, func: &FunctionDecl) -> AnalysisResult<()> {
         // 新しいスコープを開始
         self.enter_scope();
-        self.current_return_type = func.return_type.clone();
+        self.current_return_type = func.return_type.as_ref().map(|t| (**t).clone());
 
         // パラメータをスコープに追加
         for param in &func.params {
@@ -235,7 +235,7 @@ impl SemanticAnalyzer {
     fn analyze_method(&mut self, method: &MethodDecl) -> AnalysisResult<()> {
         // 新しいスコープを開始
         self.enter_scope();
-        self.current_return_type = method.return_type.clone();
+        self.current_return_type = method.return_type.as_ref().map(|t| (**t).clone());
 
         // レシーバをスコープに追加
         let receiver_name = method.receiver.name.as_deref().unwrap_or("self");
@@ -390,6 +390,7 @@ impl SemanticAnalyzer {
             Expression::Tuple(t) => t.span,
             Expression::Cast(c) => c.span,
             Expression::Assignment(a) => a.span,
+            Expression::Match(m) => m.span,
         }
     }
     

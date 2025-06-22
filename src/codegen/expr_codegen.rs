@@ -2,7 +2,6 @@
 
 use crate::ast::*;
 use crate::error::{CodegenError, YuniError, YuniResult};
-use inkwell::types::BasicType;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
@@ -34,6 +33,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Tuple(tuple) => self.compile_tuple_expr(tuple),
             Expression::Cast(cast) => self.compile_cast_expr(cast),
             Expression::Assignment(assign) => self.compile_assignment_expr(assign),
+            Expression::Match(match_expr) => self.compile_match_expr(match_expr),
         }
     }
 
@@ -208,12 +208,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                         self.builder.build_int_signed_div(left_int, right_int, "div")?
                     }
                     BinaryOp::Modulo => self.builder.build_int_signed_rem(left_int, right_int, "rem")?,
-                    BinaryOp::Less => self.builder.build_int_compare(IntPredicate::SLT, left_int, right_int, "lt")?,
-                    BinaryOp::Greater => self.builder.build_int_compare(IntPredicate::SGT, left_int, right_int, "gt")?,
-                    BinaryOp::LessEqual => self.builder.build_int_compare(IntPredicate::SLE, left_int, right_int, "le")?,
-                    BinaryOp::GreaterEqual => self.builder.build_int_compare(IntPredicate::SGE, left_int, right_int, "ge")?,
-                    BinaryOp::Equal => self.builder.build_int_compare(IntPredicate::EQ, left_int, right_int, "eq")?,
-                    BinaryOp::NotEqual => self.builder.build_int_compare(IntPredicate::NE, left_int, right_int, "ne")?,
+                    BinaryOp::Lt => self.builder.build_int_compare(IntPredicate::SLT, left_int, right_int, "lt")?,
+                    BinaryOp::Gt => self.builder.build_int_compare(IntPredicate::SGT, left_int, right_int, "gt")?,
+                    BinaryOp::Le => self.builder.build_int_compare(IntPredicate::SLE, left_int, right_int, "le")?,
+                    BinaryOp::Ge => self.builder.build_int_compare(IntPredicate::SGE, left_int, right_int, "ge")?,
+                    BinaryOp::Eq => self.builder.build_int_compare(IntPredicate::EQ, left_int, right_int, "eq")?,
+                    BinaryOp::Ne => self.builder.build_int_compare(IntPredicate::NE, left_int, right_int, "ne")?,
                     BinaryOp::And => self.builder.build_and(left_int, right_int, "and")?,
                     BinaryOp::Or => self.builder.build_or(left_int, right_int, "or")?,
                     // ビット演算子は現在定義されていない
@@ -233,12 +233,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BinaryOp::Multiply => Ok(self.builder.build_float_mul(left_float, right_float, "fmul")?.into()),
                     BinaryOp::Divide => Ok(self.builder.build_float_div(left_float, right_float, "fdiv")?.into()),
                     BinaryOp::Modulo => Ok(self.builder.build_float_rem(left_float, right_float, "frem")?.into()),
-                    BinaryOp::Less => Ok(self.builder.build_float_compare(FloatPredicate::OLT, left_float, right_float, "flt")?.into()),
-                    BinaryOp::Greater => Ok(self.builder.build_float_compare(FloatPredicate::OGT, left_float, right_float, "fgt")?.into()),
-                    BinaryOp::LessEqual => Ok(self.builder.build_float_compare(FloatPredicate::OLE, left_float, right_float, "fle")?.into()),
-                    BinaryOp::GreaterEqual => Ok(self.builder.build_float_compare(FloatPredicate::OGE, left_float, right_float, "fge")?.into()),
-                    BinaryOp::Equal => Ok(self.builder.build_float_compare(FloatPredicate::OEQ, left_float, right_float, "feq")?.into()),
-                    BinaryOp::NotEqual => Ok(self.builder.build_float_compare(FloatPredicate::ONE, left_float, right_float, "fne")?.into()),
+                    BinaryOp::Lt => Ok(self.builder.build_float_compare(FloatPredicate::OLT, left_float, right_float, "flt")?.into()),
+                    BinaryOp::Gt => Ok(self.builder.build_float_compare(FloatPredicate::OGT, left_float, right_float, "fgt")?.into()),
+                    BinaryOp::Le => Ok(self.builder.build_float_compare(FloatPredicate::OLE, left_float, right_float, "fle")?.into()),
+                    BinaryOp::Ge => Ok(self.builder.build_float_compare(FloatPredicate::OGE, left_float, right_float, "fge")?.into()),
+                    BinaryOp::Eq => Ok(self.builder.build_float_compare(FloatPredicate::OEQ, left_float, right_float, "feq")?.into()),
+                    BinaryOp::Ne => Ok(self.builder.build_float_compare(FloatPredicate::ONE, left_float, right_float, "fne")?.into()),
                     _ => Err(YuniError::Codegen(CodegenError::InvalidType {
                         message: format!("Invalid operation {:?} for float types", op),
                         span: binary.span,
@@ -256,7 +256,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 単項演算式をコンパイル
     pub fn compile_unary_expr(&mut self, unary: &UnaryExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        let operand = self.compile_expression(&unary.operand)?;
+        let operand = self.compile_expression(&unary.expr)?;
 
         match (&unary.op, operand) {
             (UnaryOp::Not, BasicValueEnum::IntValue(int_val)) => {
@@ -331,7 +331,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// 構造体リテラルをコンパイル
-    pub fn compile_struct_literal(&mut self, struct_lit: &StructLit) -> YuniResult<BasicValueEnum<'ctx>> {
+    pub fn compile_struct_literal(&mut self, struct_lit: &StructLiteral) -> YuniResult<BasicValueEnum<'ctx>> {
         // TODO: 実装
         Err(YuniError::Codegen(CodegenError::Unimplemented {
             feature: "Struct literals not yet implemented".to_string(),
@@ -381,6 +381,15 @@ impl<'ctx> CodeGenerator<'ctx> {
         Err(YuniError::Codegen(CodegenError::Unimplemented {
             feature: "Assignment expressions not yet implemented".to_string(),
             span: assign.span,
+        }))
+    }
+
+    /// match式をコンパイル
+    pub fn compile_match_expr(&mut self, match_expr: &MatchExpr) -> YuniResult<BasicValueEnum<'ctx>> {
+        // TODO: 実装
+        Err(YuniError::Codegen(CodegenError::Unimplemented {
+            feature: "Match expressions not yet implemented".to_string(),
+            span: match_expr.span,
         }))
     }
 

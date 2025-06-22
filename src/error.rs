@@ -66,6 +66,9 @@ pub enum ParserError {
 
     #[error("不正な構文: {message}")]
     InvalidSyntax { message: String, span: Span },
+
+    #[error("構文エラー: {message}")]
+    SyntaxError { message: String, span: Span },
 }
 
 /// セマンティック解析エラーの詳細
@@ -207,6 +210,10 @@ impl DiagnosticError {
                 ),
                 ParserError::InvalidSyntax { message, span } => (
                     format!("不正な構文: {}", message),
+                    vec![Label::primary(self.file_id, span.start..span.end)],
+                ),
+                ParserError::SyntaxError { message, span } => (
+                    format!("構文エラー: {}", message),
                     vec![Label::primary(self.file_id, span.start..span.end)],
                 ),
             },

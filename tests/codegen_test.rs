@@ -19,7 +19,7 @@ mod tests {
     fn compile_to_ir(source: &str, module_name: &str) -> Result<String, Box<dyn std::error::Error>> {
         // 字句解析
         let lexer = Lexer::new(source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
         
         // 構文解析
         let mut parser = Parser::new(tokens);

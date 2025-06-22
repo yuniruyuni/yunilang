@@ -53,7 +53,7 @@ lives
         println!("Code:\n{}\n", code);
 
         let lexer = Lexer::new(code);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
 
         let mut parser = Parser::new(tokens);
         match parser.parse() {

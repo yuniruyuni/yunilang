@@ -29,7 +29,7 @@ use tempfile::NamedTempFile;
 fn test_full_compilation(source: &str, expected_success: bool) -> Result<String, Box<dyn std::error::Error>> {
     // 字句解析
     let lexer = Lexer::new(source);
-    let tokens: Vec<_> = lexer.collect();
+    let tokens: Vec<_> = lexer.collect_tokens();
     
     // 構文解析
     let mut parser = Parser::new(tokens);

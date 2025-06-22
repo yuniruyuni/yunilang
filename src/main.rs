@@ -557,7 +557,7 @@ fn evaluate_repl_input(
 ) -> YuniResult<Option<String>> {
     // For now, just parse and check syntax
     let lexer = Lexer::new(input);
-    let tokens: Vec<_> = lexer.collect();
+    let tokens: Vec<_> = lexer.collect_tokens();
 
     // Check for lexer errors
     for token in &tokens {

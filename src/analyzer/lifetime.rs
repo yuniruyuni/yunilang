@@ -1,7 +1,6 @@
 //! ライフタイム解析関連の構造と処理
 
 use crate::ast::{Span, Type};
-use crate::error::{AnalyzerError, YuniResult};
 use std::collections::{HashMap, HashSet};
 
 use super::symbol::{AnalysisError, AnalysisResult, BorrowInfo, BorrowKind, LifetimeId};

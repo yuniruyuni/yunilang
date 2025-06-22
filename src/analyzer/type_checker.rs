@@ -1,7 +1,6 @@
 //! 型チェック機能
 
 use crate::ast::*;
-use crate::error::{AnalyzerError, YuniResult};
 use std::collections::HashMap;
 
 use super::symbol::{AnalysisError, AnalysisResult, FunctionSignature, TypeInfo, TypeKind};
@@ -229,7 +228,7 @@ impl TypeChecker {
                     })
                 }
             }
-            BinaryOp::Less | BinaryOp::Greater | BinaryOp::LessEqual | BinaryOp::GreaterEqual => {
+            BinaryOp::Lt | BinaryOp::Gt | BinaryOp::Le | BinaryOp::Ge => {
                 if self.types_compatible(left, right) && self.is_numeric_type(left) {
                     Ok(Type::Bool)
                 } else {
@@ -240,7 +239,7 @@ impl TypeChecker {
                     })
                 }
             }
-            BinaryOp::Equal | BinaryOp::NotEqual => {
+            BinaryOp::Eq | BinaryOp::Ne => {
                 if self.types_compatible(left, right) {
                     Ok(Type::Bool)
                 } else {

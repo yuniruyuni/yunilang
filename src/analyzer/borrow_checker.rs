@@ -1,11 +1,9 @@
 //! 借用チェッカー
 
-use crate::ast::{Expression, Pattern, Span, Statement, Type, Identifier, ReferenceExpr, FieldExpr, AssignmentExpr, CallExpr};
-use crate::error::{AnalyzerError, YuniResult};
-use std::collections::{HashMap, HashSet};
+use crate::ast::{Expression, Pattern, Span, Statement, Type};
 
-use super::lifetime::{LifetimeContext, LivesConstraint, ScopeId, UsageKind, VariableUsage};
-use super::symbol::{AnalysisError, AnalysisResult, BorrowInfo, BorrowKind, LifetimeId, Scope, Symbol};
+use super::lifetime::{LifetimeContext, UsageKind};
+use super::symbol::{AnalysisError, AnalysisResult, BorrowInfo, BorrowKind, Scope};
 
 /// 借用チェッカー
 pub struct BorrowChecker<'a> {
@@ -281,14 +279,14 @@ impl<'a> BorrowChecker<'a> {
                 self.check_expr(&binary.right)?;
             }
             Expression::Unary(unary) => {
-                self.check_expr(&unary.operand)?;
+                self.check_expr(&unary.expr)?;
             }
             Expression::Index(index) => {
                 self.check_expr(&index.object)?;
                 self.check_expr(&index.index)?;
             }
             Expression::MethodCall(method_call) => {
-                self.check_expr(&method_call.receiver)?;
+                self.check_expr(&method_call.object)?;
                 for arg in &method_call.args {
                     self.check_expr(arg)?;
                 }

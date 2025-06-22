@@ -13,7 +13,7 @@ mod tests {
     /// ソースコードからASTを構築するヘルパー関数
     fn build_ast(source: &str) -> Program {
         let lexer = Lexer::new(source);
-        let tokens: Vec<_> = lexer.collect();
+        let tokens: Vec<_> = lexer.collect_tokens();
         let mut parser = Parser::new(tokens);
         parser.parse().expect("Parsing should succeed")
     }
@@ -86,7 +86,7 @@ mod tests {
             // 戻り値の型
             assert!(func.return_type.is_some());
             if let Some(ref ret_type) = func.return_type {
-                assert!(matches!(ret_type, Type::F64));
+                assert!(matches!(**ret_type, Type::F64));
             }
             
             // 関数本体
