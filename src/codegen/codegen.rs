@@ -31,12 +31,19 @@ pub struct CodeGenerator<'ctx> {
     
     // 関数テーブル
     pub functions: HashMap<String, FunctionValue<'ctx>>,
+    // 関数の戻り値型情報
+    pub function_types: HashMap<String, Type>,
     
     // 構造体のフィールド情報
     pub struct_info: HashMap<String, StructInfo>,
+    
+    // Enumのバリアント情報（名前 -> (Enum名, バリアントインデックス)）
+    pub enum_variants: HashMap<(String, String), u32>,
 
     // 現在コンパイル中の関数
     pub current_function: Option<FunctionValue<'ctx>>,
+    // 現在の関数の戻り値型（型推論用）
+    pub current_return_type: Option<Type>,
 }
 
 impl<'ctx> CodeGenerator<'ctx> {
@@ -68,8 +75,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             type_manager,
             runtime_manager,
             functions: HashMap::new(),
+            function_types: HashMap::new(),
             struct_info: HashMap::new(),
+            enum_variants: HashMap::new(),
             current_function: None,
+            current_return_type: None,
         }
     }
     
@@ -136,11 +146,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 self.struct_info.insert(struct_def.name.clone(), struct_info);
             }
-            TypeDef::Enum(_enum_def) => {
-                return Err(YuniError::Codegen(CodegenError::Unimplemented {
-                    feature: "Enum types not yet implemented".to_string(),
-                    span: Span::dummy(),
-                }));
+            TypeDef::Enum(enum_def) => {
+                // Enumは整数型として表現
+                // 各バリアントに0から順にインデックスを割り当てる
+                for (index, variant) in enum_def.variants.iter().enumerate() {
+                    let key = (enum_def.name.clone(), variant.name.clone());
+                    self.enum_variants.insert(key, index as u32);
+                }
+                
+                // Enum型をi32として登録
+                let enum_type = self.context.i32_type();
+                self.type_manager.register_enum(enum_def.name.clone(), enum_type);
             }
         }
         Ok(())
@@ -159,6 +175,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         let function = self.module.add_function(&func.name, fn_type, None);
         self.functions.insert(func.name.clone(), function);
+        self.function_types.insert(func.name.clone(), return_type.clone());
 
         Ok(())
     }
@@ -199,7 +216,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         )?;
 
         let function = self.module.add_function(&method_name, fn_type, None);
-        self.functions.insert(method_name, function);
+        self.functions.insert(method_name.clone(), function);
+        self.function_types.insert(method_name, return_type.clone());
 
         Ok(())
     }
@@ -213,6 +231,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .clone();
 
         self.current_function = Some(function);
+        self.current_return_type = func.return_type.as_ref().map(|t| (**t).clone());
 
         // エントリブロックを作成
         let entry = self.context.append_basic_block(function, "entry");
@@ -257,6 +276,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
 
         self.current_function = None;
+        self.current_return_type = None;
         Ok(())
     }
 
@@ -288,6 +308,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .clone();
 
         self.current_function = Some(function);
+        self.current_return_type = method.return_type.as_ref().map(|t| (**t).clone());
 
         // エントリブロックを作成
         let entry = self.context.append_basic_block(function, "entry");
@@ -343,6 +364,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
 
         self.current_function = None;
+        self.current_return_type = None;
         Ok(())
     }
 

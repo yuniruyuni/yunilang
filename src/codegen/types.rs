@@ -13,6 +13,8 @@ pub struct TypeManager<'ctx> {
     context: &'ctx Context,
     /// 名前付き型のキャッシュ
     types: HashMap<String, StructType<'ctx>>,
+    /// Enum型のキャッシュ（Enumはi32として表現）
+    enum_types: HashMap<String, BasicTypeEnum<'ctx>>,
 }
 
 impl<'ctx> TypeManager<'ctx> {
@@ -20,6 +22,7 @@ impl<'ctx> TypeManager<'ctx> {
         Self {
             context,
             types: HashMap::new(),
+            enum_types: HashMap::new(),
         }
     }
     
@@ -31,6 +34,11 @@ impl<'ctx> TypeManager<'ctx> {
     /// 構造体型を取得
     pub fn get_struct(&self, name: &str) -> Option<StructType<'ctx>> {
         self.types.get(name).copied()
+    }
+    
+    /// Enum型を登録（i32として表現）
+    pub fn register_enum(&mut self, name: String, enum_type: inkwell::types::IntType<'ctx>) {
+        self.enum_types.insert(name, enum_type.into());
     }
     
     /// AST型からLLVM型への変換
@@ -63,14 +71,20 @@ impl<'ctx> TypeManager<'ctx> {
                 Ok(self.context.struct_type(&field_types, false).into())
             }
             Type::UserDefined(name) => {
-                self.types
-                    .get(name)
-                    .copied()
-                    .map(|t| t.into())
-                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                // 先に構造体型を探す
+                if let Some(struct_type) = self.types.get(name).copied() {
+                    Ok(struct_type.into())
+                }
+                // 次にEnum型を探す
+                else if let Some(enum_type) = self.enum_types.get(name).copied() {
+                    Ok(enum_type)
+                }
+                else {
+                    Err(YuniError::Codegen(CodegenError::Undefined {
                         name: name.clone(),
                         span: crate::ast::Span::dummy(),
                     }))
+                }
             }
             Type::Reference(referent, _is_mut) => {
                 let inner_type = self.ast_type_to_llvm(referent)?;
@@ -189,6 +203,7 @@ impl<'ctx> TypeManager<'ctx> {
                 let llvm_type = self.ast_type_to_llvm(ty)?;
                 match llvm_type {
                     BasicTypeEnum::StructType(st) => Ok(st.const_zero().into()),
+                    BasicTypeEnum::IntType(it) => Ok(it.const_zero().into()), // Enum型の場合
                     _ => Err(YuniError::Codegen(CodegenError::Internal {
                         message: format!("Cannot create default value for type {:?}", ty),
                     })),

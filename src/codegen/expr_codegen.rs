@@ -4,15 +4,21 @@ use crate::ast::*;
 use crate::error::{CodegenError, YuniError, YuniResult};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
+use inkwell::types::BasicTypeEnum;
 use std::collections::HashMap;
 
 use super::codegen::CodeGenerator;
 
 impl<'ctx> CodeGenerator<'ctx> {
-    /// 式をコンパイル
+    /// 式をコンパイル（期待される型のコンテキストなし）
     pub fn compile_expression(&mut self, expr: &Expression) -> YuniResult<BasicValueEnum<'ctx>> {
+        self.compile_expression_with_type(expr, None)
+    }
+
+    /// 式をコンパイル（期待される型のコンテキスト付き）
+    pub fn compile_expression_with_type(&mut self, expr: &Expression, expected_type: Option<&Type>) -> YuniResult<BasicValueEnum<'ctx>> {
         match expr {
-            Expression::Integer(lit) => self.compile_integer_literal(lit),
+            Expression::Integer(lit) => self.compile_integer_literal_with_type(lit, expected_type),
             Expression::Float(lit) => self.compile_float_literal(lit),
             Expression::String(lit) => self.compile_string_literal(lit),
             Expression::TemplateString(lit) => self.compile_template_string(lit),
@@ -39,8 +45,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
-    /// 整数リテラルをコンパイル
+    /// 整数リテラルをコンパイル（期待される型のコンテキストなし）
     pub fn compile_integer_literal(&self, lit: &IntegerLit) -> YuniResult<BasicValueEnum<'ctx>> {
+        self.compile_integer_literal_with_type(lit, None)
+    }
+
+    /// 整数リテラルをコンパイル（期待される型のコンテキスト付き）
+    pub fn compile_integer_literal_with_type(&self, lit: &IntegerLit, expected_type: Option<&Type>) -> YuniResult<BasicValueEnum<'ctx>> {
         let int_type = if let Some(suffix) = &lit.suffix {
             match suffix.as_str() {
                 "i8" => self.context.i8_type(),
@@ -53,10 +64,27 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "u32" => self.context.i32_type(),
                 "u64" => self.context.i64_type(),
                 "u128" => self.context.i128_type(),
-                _ => self.context.i64_type(), // デフォルト
+                _ => self.context.i32_type(), // デフォルト
             }
         } else {
-            self.context.i64_type() // デフォルトはi64
+            // 期待される型が指定されている場合はそれを使用
+            if let Some(expected) = expected_type {
+                match expected {
+                    Type::I8 => self.context.i8_type(),
+                    Type::I16 => self.context.i16_type(),
+                    Type::I32 => self.context.i32_type(),
+                    Type::I64 => self.context.i64_type(),
+                    Type::I128 => self.context.i128_type(),
+                    Type::U8 => self.context.i8_type(),
+                    Type::U16 => self.context.i16_type(),
+                    Type::U32 => self.context.i32_type(),
+                    Type::U64 => self.context.i64_type(),
+                    Type::U128 => self.context.i128_type(),
+                    _ => self.context.i32_type(), // 整数型でない場合はデフォルト
+                }
+            } else {
+                self.context.i32_type() // デフォルトはi32（Rustと同じ）
+            }
         };
 
         Ok(int_type.const_int(lit.value as u64, false).into())
@@ -201,6 +229,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         match (&binary.op, left, right) {
             // 整数演算
             (op, BasicValueEnum::IntValue(left_int), BasicValueEnum::IntValue(right_int)) => {
+                // 型が異なる場合は型変換を行う
+                let (left_int, right_int) = if left_int.get_type() != right_int.get_type() {
+                    self.coerce_int_types(left_int, right_int, binary.span)?
+                } else {
+                    (left_int, right_int)
+                };
+
                 let result = match op {
                     BinaryOp::Add => self.builder.build_int_add(left_int, right_int, "add")?,
                     BinaryOp::Subtract => self.builder.build_int_sub(left_int, right_int, "sub")?,
@@ -229,6 +264,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             
             // 浮動小数点演算
             (op, BasicValueEnum::FloatValue(left_float), BasicValueEnum::FloatValue(right_float)) => {
+                // 型が異なる場合は型変換を行う
+                let (left_float, right_float) = if left_float.get_type() != right_float.get_type() {
+                    self.coerce_float_types(left_float, right_float)?
+                } else {
+                    (left_float, right_float)
+                };
+                
                 match op {
                     BinaryOp::Add => Ok(self.builder.build_float_add(left_float, right_float, "fadd")?.into()),
                     BinaryOp::Subtract => Ok(self.builder.build_float_sub(left_float, right_float, "fsub")?.into()),
@@ -306,23 +348,35 @@ impl<'ctx> CodeGenerator<'ctx> {
             return self.compile_println_call(&call.args, call.span);
         }
 
-        // 通常の関数呼び出し
-        // 引数を先にコンパイル
-        let mut args = Vec::new();
-        for arg in &call.args {
-            let arg_value = self.compile_expression(arg)?;
-            args.push(arg_value.into());
-        }
-
-        // 関数を取得
-        let func = self.functions.get(func_name)
+        // 関数情報を取得（コピーして借用を解放）
+        let func = *self.functions.get(func_name)
             .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
                 name: func_name.clone(),
                 span: call.span,
             }))?;
+            
+        let func_type = func.get_type();
+        let param_types = func_type.get_param_types();
+
+        // 通常の関数呼び出し
+        // 引数を先にコンパイルし、必要に応じて型変換
+        let mut args = Vec::new();
+        
+        for (i, arg) in call.args.iter().enumerate() {
+            let arg_value = self.compile_expression(arg)?;
+            
+            // パラメータの型に合わせて変換
+            if i < param_types.len() {
+                let expected_type = param_types[i];
+                let coerced_value = self.coerce_to_type(arg_value, expected_type, arg.span())?;
+                args.push(coerced_value.into());
+            } else {
+                args.push(arg_value.into());
+            }
+        }
 
         // 関数呼び出し
-        let call_result = self.builder.build_call(*func, &args, "call_result")?;
+        let call_result = self.builder.build_call(func, &args, "call_result")?;
         
         if let Some(value) = call_result.try_as_basic_value().left() {
             Ok(value)
@@ -409,11 +463,101 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// フィールドアクセス式をコンパイル
     pub fn compile_field_expr(&mut self, field: &FieldExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Field access not yet implemented".to_string(),
-            span: field.span,
-        }))
+        // オブジェクトの式をコンパイル
+        let object_value = self.compile_expression(&field.object)?;
+        
+        // オブジェクトの型を推論
+        let object_type = self.expression_type(&field.object)?;
+        
+        // 構造体名を取得
+        let struct_name = match &object_type {
+            Type::UserDefined(name) => name,
+            Type::Reference(inner, _) => {
+                if let Type::UserDefined(name) = inner.as_ref() {
+                    name
+                } else {
+                    return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "Field access on non-struct type".to_string(),
+                        span: field.span,
+                    }));
+                }
+            }
+            _ => {
+                return Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "Field access on non-struct type".to_string(),
+                    span: field.span,
+                }));
+            }
+        };
+        
+        // 構造体情報を取得
+        let struct_info = self.struct_info.get(struct_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Struct info not found for {}", struct_name),
+            }))?;
+        
+        // フィールドのインデックスを取得
+        let field_index = struct_info.get_field_index(&field.field)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: format!("{}.{}", struct_name, field.field),
+                span: field.span,
+            }))?;
+        
+        // 構造体値からフィールドを抽出
+        match object_value {
+            BasicValueEnum::StructValue(struct_val) => {
+                // 直接構造体値の場合
+                let field_value = self.builder.build_extract_value(
+                    struct_val,
+                    field_index as u32,
+                    &field.field
+                )?;
+                Ok(field_value)
+            }
+            BasicValueEnum::PointerValue(ptr_val) => {
+                // ポインタの場合はGEPを使用
+                let struct_type = self.type_manager.get_struct(struct_name)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Struct type not found for {}", struct_name),
+                    }))?;
+                
+                let indices = [
+                    self.context.i32_type().const_zero(),
+                    self.context.i32_type().const_int(field_index as u64, false),
+                ];
+                
+                let field_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        struct_type,
+                        ptr_val,
+                        &indices,
+                        &format!("{}_ptr", field.field),
+                    )?
+                };
+                
+                // フィールドの型を取得
+                let field_type = struct_info.get_field_type(field_index as usize)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Field type not found for index {}", field_index),
+                    }))?;
+                let llvm_field_type = self.type_manager.ast_type_to_llvm(field_type)?;
+                
+                // フィールドの値をロード
+                let field_value = self.builder.build_load(
+                    llvm_field_type,
+                    field_ptr,
+                    &field.field
+                )?;
+                
+                Ok(field_value)
+            }
+            _ => {
+                Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "Invalid object type for field access".to_string(),
+                    span: field.span,
+                }))
+            }
+        }
     }
 
     /// 参照式をコンパイル
@@ -436,20 +580,73 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 構造体リテラルをコンパイル
     pub fn compile_struct_literal(&mut self, struct_lit: &StructLiteral) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Struct literals not yet implemented".to_string(),
-            span: struct_lit.span,
-        }))
+        // 構造体型を取得
+        let struct_type = self.type_manager.get_struct(&struct_lit.name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: struct_lit.name.clone(),
+                span: struct_lit.span,
+            }))?;
+
+        // 構造体情報を取得してクローン（借用チェッカーエラーを回避）
+        let struct_info = self.struct_info.get(&struct_lit.name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Struct info not found for {}", struct_lit.name),
+            }))?
+            .clone();
+
+        // 各フィールドの値をコンパイル
+        let mut field_values = vec![];
+        for (index, field_type) in struct_info.field_types.iter().enumerate() {
+            // フィールド名を取得
+            let field_name = struct_info.field_indices.iter()
+                .find(|(_, &idx)| idx == index as u32)
+                .map(|(name, _)| name.clone())
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                    message: format!("Field name not found for index {}", index),
+                }))?;
+
+            // 初期化されたフィールドを探す
+            let field_init = struct_lit.fields.iter()
+                .find(|f| f.name == field_name);
+
+            let value = if let Some(init) = field_init {
+                // フィールドが明示的に初期化されている場合
+                self.compile_expression(&init.value)?
+            } else {
+                // フィールドが初期化されていない場合はデフォルト値を使用
+                self.type_manager.create_default_value(field_type)?
+            };
+
+            field_values.push(value);
+        }
+
+        // 構造体値を作成
+        Ok(struct_type.const_named_struct(&field_values).into())
     }
 
     /// 列挙型バリアントをコンパイル
     pub fn compile_enum_variant(&mut self, enum_var: &EnumVariantExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Enum variants not yet implemented".to_string(),
-            span: enum_var.span,
-        }))
+        // データを持たないバリアントのみ現在サポート
+        match &enum_var.fields {
+            crate::ast::EnumVariantFields::Unit => {
+                // バリアントのインデックスを取得
+                let key = (enum_var.enum_name.clone(), enum_var.variant.clone());
+                let variant_index = self.enum_variants.get(&key)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                        name: format!("{}::{}", enum_var.enum_name, enum_var.variant),
+                        span: enum_var.span,
+                    }))?;
+                
+                // i32の定数として返す
+                Ok(self.context.i32_type().const_int(*variant_index as u64, false).into())
+            }
+            _ => {
+                Err(YuniError::Codegen(CodegenError::Unimplemented {
+                    feature: "Enum variants with data not yet implemented".to_string(),
+                    span: enum_var.span,
+                }))
+            }
+        }
     }
 
     /// 配列式をコンパイル
@@ -472,11 +669,70 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// キャスト式をコンパイル
     pub fn compile_cast_expr(&mut self, cast: &CastExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Cast expressions not yet implemented".to_string(),
-            span: cast.span,
-        }))
+        let value = self.compile_expression(&cast.expr)?;
+        let target_type = self.type_manager.ast_type_to_llvm(&cast.ty)?;
+        
+        match (value, target_type) {
+            // 整数から整数へのキャスト
+            (BasicValueEnum::IntValue(int_val), BasicTypeEnum::IntType(target_int_type)) => {
+                let source_bits = int_val.get_type().get_bit_width();
+                let target_bits = target_int_type.get_bit_width();
+                
+                if source_bits == target_bits {
+                    Ok(int_val.into())
+                } else if source_bits < target_bits {
+                    // 拡張
+                    if self.is_signed_type(source_bits) {
+                        Ok(self.builder.build_int_s_extend(int_val, target_int_type, "sext")?.into())
+                    } else {
+                        Ok(self.builder.build_int_z_extend(int_val, target_int_type, "zext")?.into())
+                    }
+                } else {
+                    // 切り詰め
+                    Ok(self.builder.build_int_truncate(int_val, target_int_type, "trunc")?.into())
+                }
+            }
+            
+            // 整数から浮動小数点へのキャスト
+            (BasicValueEnum::IntValue(int_val), BasicTypeEnum::FloatType(target_float_type)) => {
+                if self.is_signed_type(int_val.get_type().get_bit_width()) {
+                    Ok(self.builder.build_signed_int_to_float(int_val, target_float_type, "sitofp")?.into())
+                } else {
+                    Ok(self.builder.build_unsigned_int_to_float(int_val, target_float_type, "uitofp")?.into())
+                }
+            }
+            
+            // 浮動小数点から整数へのキャスト
+            (BasicValueEnum::FloatValue(float_val), BasicTypeEnum::IntType(target_int_type)) => {
+                if self.is_signed_type(target_int_type.get_bit_width()) {
+                    Ok(self.builder.build_float_to_signed_int(float_val, target_int_type, "fptosi")?.into())
+                } else {
+                    Ok(self.builder.build_float_to_unsigned_int(float_val, target_int_type, "fptoui")?.into())
+                }
+            }
+            
+            // 浮動小数点から浮動小数点へのキャスト
+            (BasicValueEnum::FloatValue(float_val), BasicTypeEnum::FloatType(target_float_type)) => {
+                let source_type = float_val.get_type();
+                if source_type == target_float_type {
+                    Ok(float_val.into())
+                } else if source_type == self.context.f32_type() && target_float_type == self.context.f64_type() {
+                    Ok(self.builder.build_float_ext(float_val, target_float_type, "fpext")?.into())
+                } else if source_type == self.context.f64_type() && target_float_type == self.context.f32_type() {
+                    Ok(self.builder.build_float_trunc(float_val, target_float_type, "fptrunc")?.into())
+                } else {
+                    Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: format!("Unsupported float cast from {:?} to {:?}", source_type, target_float_type),
+                        span: cast.span,
+                    }))
+                }
+            }
+            
+            _ => Err(YuniError::Codegen(CodegenError::InvalidType {
+                message: format!("Unsupported cast from {:?} to {:?}", value, target_type),
+                span: cast.span,
+            }))
+        }
     }
 
     /// 代入式をコンパイル
@@ -587,6 +843,135 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(value)
     }
 
+    /// 値を指定された型に変換
+    fn coerce_to_type(
+        &self, 
+        value: BasicValueEnum<'ctx>, 
+        target_type: BasicTypeEnum<'ctx>,
+        span: Span
+    ) -> YuniResult<BasicValueEnum<'ctx>> {
+        match (value, target_type) {
+            // 整数から整数への変換
+            (BasicValueEnum::IntValue(int_val), BasicTypeEnum::IntType(target_int_type)) => {
+                let source_type = int_val.get_type();
+                if source_type == target_int_type {
+                    Ok(int_val.into())
+                } else {
+                    let source_bits = source_type.get_bit_width();
+                    let target_bits = target_int_type.get_bit_width();
+                    
+                    if source_bits < target_bits {
+                        // 拡張
+                        if self.is_signed_type(source_bits) {
+                            Ok(self.builder.build_int_s_extend(int_val, target_int_type, "sext")?.into())
+                        } else {
+                            Ok(self.builder.build_int_z_extend(int_val, target_int_type, "zext")?.into())
+                        }
+                    } else {
+                        // 切り詰め
+                        Ok(self.builder.build_int_truncate(int_val, target_int_type, "trunc")?.into())
+                    }
+                }
+            }
+            // 浮動小数点から浮動小数点への変換
+            (BasicValueEnum::FloatValue(float_val), BasicTypeEnum::FloatType(target_float_type)) => {
+                let source_type = float_val.get_type();
+                if source_type == target_float_type {
+                    Ok(float_val.into())
+                } else if source_type == self.context.f32_type() && target_float_type == self.context.f64_type() {
+                    Ok(self.builder.build_float_ext(float_val, target_float_type, "fpext")?.into())
+                } else if source_type == self.context.f64_type() && target_float_type == self.context.f32_type() {
+                    Ok(self.builder.build_float_trunc(float_val, target_float_type, "fptrunc")?.into())
+                } else {
+                    Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: format!("Unsupported float coercion from {:?} to {:?}", source_type, target_float_type),
+                        span,
+                    }))
+                }
+            }
+            // 同じ型の場合はそのまま返す
+            _ => {
+                if value.get_type() == target_type {
+                    Ok(value)
+                } else {
+                    Err(YuniError::Codegen(CodegenError::TypeError {
+                        expected: format!("{:?}", target_type),
+                        actual: format!("{:?}", value.get_type()),
+                        span,
+                    }))
+                }
+            }
+        }
+    }
+
+    /// 整数型の強制変換を行う
+    /// 異なるビット幅の整数型を同じ型に変換する
+    fn coerce_int_types(
+        &self, 
+        left: inkwell::values::IntValue<'ctx>, 
+        right: inkwell::values::IntValue<'ctx>,
+        _span: Span
+    ) -> YuniResult<(inkwell::values::IntValue<'ctx>, inkwell::values::IntValue<'ctx>)> {
+        let left_bits = left.get_type().get_bit_width();
+        let right_bits = right.get_type().get_bit_width();
+        
+        if left_bits == right_bits {
+            return Ok((left, right));
+        }
+        
+        // より大きい型に合わせる
+        if left_bits > right_bits {
+            // rightをleftの型に拡張
+            let extended = if self.is_signed_type(right_bits) {
+                self.builder.build_int_s_extend(right, left.get_type(), "sext")?
+            } else {
+                self.builder.build_int_z_extend(right, left.get_type(), "zext")?
+            };
+            Ok((left, extended))
+        } else {
+            // leftをrightの型に拡張
+            let extended = if self.is_signed_type(left_bits) {
+                self.builder.build_int_s_extend(left, right.get_type(), "sext")?
+            } else {
+                self.builder.build_int_z_extend(left, right.get_type(), "zext")?
+            };
+            Ok((extended, right))
+        }
+    }
+    
+    /// 整数型が符号付きかどうかを判定
+    fn is_signed_type(&self, _bit_width: u32) -> bool {
+        // TODO: 実際の型情報から符号の有無を判定すべき
+        // 現在は簡易実装として、すべて符号付きとして扱う
+        true
+    }
+    
+    /// 浮動小数点型の強制変換を行う
+    fn coerce_float_types(
+        &self,
+        left: inkwell::values::FloatValue<'ctx>,
+        right: inkwell::values::FloatValue<'ctx>,
+    ) -> YuniResult<(inkwell::values::FloatValue<'ctx>, inkwell::values::FloatValue<'ctx>)> {
+        let left_type = left.get_type();
+        let right_type = right.get_type();
+        
+        if left_type == right_type {
+            return Ok((left, right));
+        }
+        
+        // f64型を優先する（より精度が高い）
+        if left_type == self.context.f64_type() {
+            let extended = self.builder.build_float_ext(right, left_type, "fpext")?;
+            Ok((left, extended))
+        } else if right_type == self.context.f64_type() {
+            let extended = self.builder.build_float_ext(left, right_type, "fpext")?;
+            Ok((extended, right))
+        } else {
+            // どちらもf64でない場合はそのまま返す（エラーになるかもしれない）
+            Ok((left, right))
+        }
+    }
+
     /// 式の型を推論する
     pub fn expression_type(&mut self, expr: &Expression) -> YuniResult<Type> {
         match expr {
@@ -603,10 +988,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                         "u32" => Ok(Type::U32),
                         "u64" => Ok(Type::U64),
                         "u128" => Ok(Type::U128),
-                        _ => Ok(Type::I64), // デフォルト
+                        _ => Ok(Type::I32), // デフォルト
                     }
                 } else {
-                    Ok(Type::I64) // デフォルト
+                    Ok(Type::I32) // デフォルトはi32（Rustと同じ）
                 }
             }
             Expression::Float(lit) => {
@@ -696,11 +1081,101 @@ impl<'ctx> CodeGenerator<'ctx> {
                 
                 // println の特別な処理
                 if func_name == "println" {
-                    return Ok(Type::Void);
+                    return Ok(Type::I32); // printlnは実際にはi32(0)を返すので
                 }
                 
-                // 関数の戻り値型を取得（簡易実装）
-                Ok(Type::Void) // デフォルト
+                // 関数の戻り値型を取得
+                if let Some(return_type) = self.function_types.get(func_name) {
+                    // Void型の関数は実際にはunit値（i32(0)）を返すため、
+                    // 型推論ではI32として扱う
+                    if matches!(return_type, Type::Void) {
+                        Ok(Type::I32)
+                    } else {
+                        Ok(return_type.clone())
+                    }
+                } else {
+                    // 関数が見つからない場合はエラー
+                    Err(YuniError::Codegen(CodegenError::Undefined {
+                        name: func_name.clone(),
+                        span: call.span,
+                    }))
+                }
+            }
+            Expression::If(if_expr) => {
+                // if式の場合、then/elseブランチの型から推論
+                let then_type = self.expression_type(&if_expr.then_branch)?;
+                if let Some(else_branch) = &if_expr.else_branch {
+                    let else_type = self.expression_type(else_branch)?;
+                    // 両方の型が同じならその型を返す
+                    if then_type == else_type {
+                        Ok(then_type)
+                    } else {
+                        // 型が異なる場合はunit型
+                        Ok(Type::I32) // unit型の代わりにi32(0)を使用
+                    }
+                } else {
+                    // elseブランチがない場合はunit型
+                    Ok(Type::I32) // unit型の代わりにi32(0)を使用
+                }
+            }
+            Expression::Block(block_expr) => {
+                // ブロック式の場合、最後の式の型を返す
+                if let Some(last_expr) = &block_expr.last_expr {
+                    self.expression_type(last_expr)
+                } else {
+                    // 最後の式がない場合はunit型
+                    Ok(Type::I32) // unit型の代わりにi32(0)を使用
+                }
+            }
+            Expression::StructLit(struct_lit) => {
+                // 構造体リテラルの型は構造体名から決まる
+                Ok(Type::UserDefined(struct_lit.name.clone()))
+            }
+            Expression::Field(field_expr) => {
+                // フィールドアクセスの型推論
+                let object_type = self.expression_type(&field_expr.object)?;
+                
+                let struct_name = match &object_type {
+                    Type::UserDefined(name) => name,
+                    Type::Reference(inner, _) => {
+                        if let Type::UserDefined(name) = inner.as_ref() {
+                            name
+                        } else {
+                            return Err(YuniError::Codegen(CodegenError::InvalidType {
+                                message: "Field access on non-struct type".to_string(),
+                                span: field_expr.span,
+                            }));
+                        }
+                    }
+                    _ => {
+                        return Err(YuniError::Codegen(CodegenError::InvalidType {
+                            message: "Field access on non-struct type".to_string(),
+                            span: field_expr.span,
+                        }));
+                    }
+                };
+                
+                let struct_info = self.struct_info.get(struct_name)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Struct info not found for {}", struct_name),
+                    }))?;
+                
+                let field_index = struct_info.get_field_index(&field_expr.field)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                        name: format!("{}.{}", struct_name, field_expr.field),
+                        span: field_expr.span,
+                    }))?;
+                
+                let field_type = struct_info.get_field_type(field_index as usize)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Field type not found for index {}", field_index),
+                    }))?;
+                
+                Ok(field_type.clone())
+            }
+            Expression::EnumVariant(enum_variant) => {
+                // Enumバリアントの型はEnum自体の型
+                Ok(Type::UserDefined(enum_variant.enum_name.clone()))
             }
             _ => Err(YuniError::Codegen(CodegenError::Unimplemented {
                 feature: "Type inference not implemented for this expression".to_string(),

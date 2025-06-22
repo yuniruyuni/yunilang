@@ -218,4 +218,53 @@ impl Parser {
 
         Ok(Block { statements, span })
     }
+
+    /// ブロック式を解析（最後の式を戻り値として扱う）
+    pub(super) fn parse_block_expression(&mut self) -> ParseResult<(Vec<Statement>, Option<Box<Expression>>)> {
+        self.expect(Token::LeftBrace)?;
+
+        let mut statements = Vec::new();
+        let mut last_expr = None;
+
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            // 式の可能性があるかチェック
+            if self.is_expression_start() {
+                // デバッグ: 現在のトークンを出力
+                if let Some(token) = self.current_token() {
+                    eprintln!("DEBUG: parse_block_expression - current token: {:?}", token);
+                }
+                let expr = self.parse_expression_internal()?;
+                
+                // セミコロンがあるか、次がブロック終了でないかチェック
+                if self.check(&Token::Semicolon) {
+                    self.advance();
+                    statements.push(Statement::Expression(expr));
+                } else if self.check(&Token::RightBrace) {
+                    // ブロックの最後の式（セミコロンなし）は戻り値として扱う
+                    last_expr = Some(Box::new(expr));
+                } else {
+                    // セミコロンが必要だがない場合はエラー
+                    return Err(self.error("Expected semicolon or end of block".to_string()));
+                }
+            } else {
+                // 文として解析
+                let stmt = self.parse_statement_internal()?;
+                statements.push(stmt);
+            }
+        }
+
+        self.expect(Token::RightBrace)?;
+
+        Ok((statements, last_expr))
+    }
+
+    /// 式の開始トークンかどうかをチェック
+    fn is_expression_start(&self) -> bool {
+        match self.current_token() {
+            Some(Token::Let) | Some(Token::Return) | Some(Token::While) | Some(Token::For) => false,
+            Some(Token::If) => true, // if式は式として扱える
+            Some(Token::LeftBrace) => true, // ブロック式
+            _ => true, // その他は式として扱う
+        }
+    }
 }

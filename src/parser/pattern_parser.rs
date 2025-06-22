@@ -22,6 +22,30 @@ impl Parser {
                 // 構造体パターンかどうかチェック
                 if self.check(&Token::LeftBrace) {
                     self.parse_struct_pattern(name)
+                } else if self.check(&Token::LeftParen) {
+                    // タプルライクパターン: Some(x), None(), Point(x, y) など
+                    self.advance();
+                    let mut patterns = Vec::new();
+                    
+                    while !self.check(&Token::RightParen) && !self.is_at_end() {
+                        let pattern = self.parse_pattern(false)?;
+                        patterns.push(pattern);
+                        
+                        if !self.check(&Token::RightParen) {
+                            self.expect(Token::Comma)?;
+                        }
+                    }
+                    
+                    self.expect(Token::RightParen)?;
+                    
+                    // タプルライクなEnumバリアントパターンとして扱う
+                    // 注：ここでは簡単のため、enum名を空文字列として扱う
+                    // 実際のアプリケーションでは、型推論やインポートを考慮する必要がある
+                    Ok(Pattern::EnumVariant {
+                        enum_name: String::new(), // 型推論で解決される
+                        variant: name,
+                        fields: crate::ast::EnumVariantPatternFields::Tuple(patterns),
+                    })
                 } else {
                     Ok(Pattern::Identifier(name, is_mut))
                 }

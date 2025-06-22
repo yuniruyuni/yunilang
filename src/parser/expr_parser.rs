@@ -515,6 +515,18 @@ impl Parser {
             Some(Token::If) => {
                 self.parse_if_expression()
             }
+            Some(Token::LeftBrace) => {
+                // ブロック式を解析
+                let start = self.current_span().start;
+                let (statements, last_expr) = self.parse_block_expression()?;
+                let span = self.span_from(start);
+                
+                Ok(Expression::Block(BlockExpr {
+                    statements,
+                    last_expr,
+                    span,
+                }))
+            }
             _ => Err(self.error("Expected expression".to_string())),
         }
     }
@@ -526,6 +538,11 @@ impl Parser {
         
         while !self.check(&Token::RightBrace) && !self.is_at_end() {
             let field_name = self.expect_identifier()?;
+            
+            // フィールド名の後にコロンがない場合、これは構造体リテラルではない
+            if !self.check(&Token::Colon) {
+                return Err(self.error(format!("Expected ':' after field name '{}' in struct literal", field_name)));
+            }
             self.expect(Token::Colon)?;
             let value = self.parse_expression_internal()?;
             
@@ -633,7 +650,10 @@ impl Parser {
         if !self.check(&Token::LeftBrace) {
             return Err(self.error("Expected '{' after if condition".to_string()));
         }
-        let then_branch = self.parse_block()?;
+        
+        // ブロック式として解析
+        let (then_statements, then_last_expr) = self.parse_block_expression()?;
+        let then_span = self.span_from(start);
 
         let else_branch = if self.match_token(&Token::Else) {
             if self.check(&Token::If) {
@@ -641,13 +661,14 @@ impl Parser {
                 Some(Box::new(self.parse_if_expression()?))
             } else {
                 // else ブロックの場合
-                let else_block = self.parse_block()?;
-                // ブロックを式として扱うために、Block式が必要
-                let span = else_block.span;
+                let else_start = self.current_span().start;
+                let (else_statements, else_last_expr) = self.parse_block_expression()?;
+                let else_span = self.span_from(else_start);
+                
                 Some(Box::new(Expression::Block(BlockExpr {
-                    statements: else_block.statements,
-                    last_expr: None,
-                    span,
+                    statements: else_statements,
+                    last_expr: else_last_expr,
+                    span: else_span,
                 })))
             }
         } else {
@@ -657,10 +678,9 @@ impl Parser {
         let span = self.span_from(start);
         
         // then_branchをBlock式として扱う
-        let then_span = then_branch.span;
         let then_expr = Expression::Block(BlockExpr {
-            statements: then_branch.statements,
-            last_expr: None,
+            statements: then_statements,
+            last_expr: then_last_expr,
             span: then_span,
         });
 
@@ -692,7 +712,22 @@ impl Parser {
             };
             
             self.expect(Token::FatArrow)?;
-            let expr = self.parse_expression_internal()?;
+            
+            // matchアームの値部分を解析
+            let expr = if self.check(&Token::LeftBrace) {
+                // ブロック式の場合
+                let start = self.current_span().start;
+                let (statements, last_expr) = self.parse_block_expression()?;
+                let span = self.span_from(start);
+                Expression::Block(BlockExpr {
+                    statements,
+                    last_expr,
+                    span,
+                })
+            } else {
+                // 通常の式
+                self.parse_expression_internal()?
+            };
             
             arms.push(MatchArm {
                 pattern,

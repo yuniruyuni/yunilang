@@ -60,7 +60,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let alloca = self.create_entry_block_alloca(name, &ty)?;
 
                 if let Some(init) = &let_stmt.init {
-                    let value = self.compile_expression(init)?;
+                    // 期待される型を渡して初期化式をコンパイル
+                    let value = self.compile_expression_with_type(init, Some(&ty))?;
                     self.builder.build_store(alloca, value)?;
                 }
 
@@ -131,7 +132,9 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// return文をコンパイル
     pub fn compile_return(&mut self, ret: &ReturnStatement) -> YuniResult<()> {
         if let Some(value) = &ret.value {
-            let return_value = self.compile_expression(value)?;
+            // 現在の関数の戻り値型を期待される型として渡す
+            let expected_type = self.current_return_type.clone();
+            let return_value = self.compile_expression_with_type(value, expected_type.as_ref())?;
             self.builder.build_return(Some(&return_value))?;
         } else {
             self.builder.build_return(None)?;
@@ -346,11 +349,81 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// フィールド代入をコンパイル
-    pub fn compile_field_assignment(&mut self, _field_expr: &FieldExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Field assignment not yet implemented".to_string(),
-            span: Span::dummy(),
-        }))
+    pub fn compile_field_assignment(&mut self, field_expr: &FieldExpr, value: BasicValueEnum<'ctx>) -> YuniResult<()> {
+        // オブジェクトの式をコンパイル（ポインタを取得）
+        let object_value = self.compile_expression(&field_expr.object)?;
+        
+        // オブジェクトの型を推論
+        let object_type = self.expression_type(&field_expr.object)?;
+        
+        // 構造体名を取得
+        let struct_name = match &object_type {
+            Type::UserDefined(name) => name,
+            Type::Reference(inner, _) => {
+                if let Type::UserDefined(name) = inner.as_ref() {
+                    name
+                } else {
+                    return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "Field assignment on non-struct type".to_string(),
+                        span: field_expr.span,
+                    }));
+                }
+            }
+            _ => {
+                return Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "Field assignment on non-struct type".to_string(),
+                    span: field_expr.span,
+                }));
+            }
+        };
+        
+        // 構造体情報を取得
+        let struct_info = self.struct_info.get(struct_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Struct info not found for {}", struct_name),
+            }))?;
+        
+        // フィールドのインデックスを取得
+        let field_index = struct_info.get_field_index(&field_expr.field)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: format!("{}.{}", struct_name, field_expr.field),
+                span: field_expr.span,
+            }))?;
+        
+        // オブジェクトがポインタであることを確認
+        match object_value {
+            BasicValueEnum::PointerValue(ptr_val) => {
+                // GEPを使ってフィールドのポインタを取得
+                let struct_type = self.type_manager.get_struct(struct_name)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Struct type not found for {}", struct_name),
+                    }))?;
+                
+                let indices = [
+                    self.context.i32_type().const_zero(),
+                    self.context.i32_type().const_int(field_index as u64, false),
+                ];
+                
+                let field_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        struct_type,
+                        ptr_val,
+                        &indices,
+                        &format!("{}_ptr", field_expr.field),
+                    )?
+                };
+                
+                // フィールドに値を格納
+                self.builder.build_store(field_ptr, value)?;
+                Ok(())
+            }
+            _ => {
+                Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "Field assignment requires a pointer to struct".to_string(),
+                    span: field_expr.span,
+                }))
+            }
+        }
     }
 
     /// インデックス代入をコンパイル

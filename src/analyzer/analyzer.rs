@@ -336,16 +336,17 @@ impl SemanticAnalyzer {
     fn analyze_let_statement(&mut self, let_stmt: &LetStatement) -> AnalysisResult<bool> {
         // 初期化式がある場合は型チェック
         let inferred_type = if let Some(ref init_expr) = let_stmt.init {
-            let expr_type = self.analyze_expression(init_expr)?;
-            
-            // 型注釈がある場合は一致をチェック
-            if let Some(ref annotated_type) = let_stmt.ty {
+            // 型注釈がある場合はそれを期待される型として使用
+            let expr_type = if let Some(ref annotated_type) = let_stmt.ty {
                 self.type_checker.validate_type(annotated_type, let_stmt.span)?;
+                let expr_type = self.analyze_expression_with_type(init_expr, Some(annotated_type))?;
                 self.type_checker.check_type_compatibility(annotated_type, &expr_type, let_stmt.span)?;
                 annotated_type.clone()
             } else {
-                expr_type
-            }
+                self.analyze_expression(init_expr)?
+            };
+            
+            expr_type
         } else if let Some(ref annotated_type) = let_stmt.ty {
             self.type_checker.validate_type(annotated_type, let_stmt.span)?;
             annotated_type.clone()
@@ -402,8 +403,10 @@ impl SemanticAnalyzer {
 
     /// return文の解析
     fn analyze_return_statement(&mut self, ret: &ReturnStatement) -> AnalysisResult<bool> {
+        let expected_type = self.current_return_type.clone();
         let return_type = if let Some(ref expr) = ret.value {
-            self.analyze_expression(expr)?
+            // 現在の関数の戻り値型を期待される型として渡す
+            self.analyze_expression_with_type(expr, expected_type.as_ref())?
         } else {
             Type::Void
         };
@@ -500,8 +503,13 @@ impl SemanticAnalyzer {
         Ok(false)
     }
 
-    /// 式の解析と型推論
+    /// 式の解析と型推論（期待される型のコンテキストなし）
     fn analyze_expression(&mut self, expr: &Expression) -> AnalysisResult<Type> {
+        self.analyze_expression_with_type(expr, None)
+    }
+
+    /// 式の解析と型推論（期待される型のコンテキスト付き）
+    fn analyze_expression_with_type(&mut self, expr: &Expression, expected_type: Option<&Type>) -> AnalysisResult<Type> {
         match expr {
             Expression::Integer(int_lit) => {
                 if let Some(suffix) = &int_lit.suffix {
@@ -516,10 +524,27 @@ impl SemanticAnalyzer {
                         "u32" => Ok(Type::U32),
                         "u64" => Ok(Type::U64),
                         "u128" => Ok(Type::U128),
-                        _ => Ok(Type::I32), // fallback
+                        _ => Ok(Type::I32), // デフォルト
                     }
                 } else {
-                    Ok(Type::I32) // default when no suffix
+                    // 期待される型が指定されている場合はそれを使用
+                    if let Some(expected) = expected_type {
+                        match expected {
+                            Type::I8 => Ok(Type::I8),
+                            Type::I16 => Ok(Type::I16),
+                            Type::I32 => Ok(Type::I32),
+                            Type::I64 => Ok(Type::I64),
+                            Type::I128 => Ok(Type::I128),
+                            Type::U8 => Ok(Type::U8),
+                            Type::U16 => Ok(Type::U16),
+                            Type::U32 => Ok(Type::U32),
+                            Type::U64 => Ok(Type::U64),
+                            Type::U128 => Ok(Type::U128),
+                            _ => Ok(Type::I32), // 整数型でない場合はデフォルト
+                        }
+                    } else {
+                        Ok(Type::I32) // サフィックスがない場合のデフォルトはi32
+                    }
                 }
             },
             Expression::Float(float_lit) => {
