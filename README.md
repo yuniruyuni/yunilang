@@ -44,9 +44,19 @@ fn main() {
 
 詳細な言語仕様とガイドについては、以下のドキュメントをご参照ください：
 
-- **[言語概要](docs/language-overview.md)** - Yuni言語の基本的な文法と機能
+### 言語仕様
+- **[構文仕様](docs/syntax.md)** - Yuni言語の完全な構文ガイド
+- **[型システム](docs/type-system.md)** - 型システムの詳細仕様
+- **[所有権システム](docs/ownership.md)** - メモリ安全性を保証する所有権システム
 - **[パターンマッチング](docs/pattern-match.md)** - 強力なパターンマッチング機能の詳細
-- **[println ビルトイン関数](docs/println-builtin.md)** - 組み込み出力関数の仕様
+
+### 標準ライブラリとツール
+- **[標準ライブラリ](docs/standard-library.md)** - 組み込み関数と標準ライブラリの仕様
+- **[コンパイラ使用方法](docs/compiler-usage.md)** - Yuniコンパイラの詳細な使用ガイド
+
+### 追加資料
+- **[言語概要](docs/language-overview.md)** - Yuni言語の基本的な文法と機能（概要）
+- **[println ビルトイン関数](docs/println-builtin.md)** - 組み込み出力関数の技術仕様
 
 ## プロジェクト構造
 
