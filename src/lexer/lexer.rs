@@ -33,8 +33,11 @@ impl<'a> Lexer<'a> {
         match token {
             Ok(token) => Some(TokenWithPosition { token, span }),
             Err(_) => {
-                // エラートークンをスキップして次のトークンを試す
-                self.next_token()
+                // エラートークンを返す
+                Some(TokenWithPosition { 
+                    token: Token::Error, 
+                    span 
+                })
             }
         }
     }
@@ -80,8 +83,11 @@ pub fn tokenize(input: &str) -> Vec<TokenWithPosition> {
             }
             Err(_) => {
                 // レキサーエラー（未知の文字など）
-                // エラーをスキップして続行
-                continue;
+                // エラートークンを追加
+                tokens.push(TokenWithPosition {
+                    token: Token::Error,
+                    span: lexer.span(),
+                });
             }
         }
     }
@@ -169,5 +175,23 @@ mod tests {
         assert!(matches!(tokens[7].token, Token::Gt));
         assert!(matches!(tokens[8].token, Token::AndAnd));
         assert!(matches!(tokens[9].token, Token::OrOr));
+    }
+
+    #[test]
+    fn test_error_tokens() {
+        let input = "let x = @#$;";
+        let lexer = Lexer::new(input);
+        let tokens = lexer.collect_tokens();
+        
+        // デバッグ出力
+        for (i, token) in tokens.iter().enumerate() {
+            println!("{}: {:?} @ {:?}", i, token.token, token.span);
+        }
+        
+        let error_count = tokens.iter().filter(|t| matches!(t.token, Token::Error)).count();
+        println!("Error count: {}", error_count);
+        
+        // 実際のトークン数とエラー数を確認
+        assert!(error_count == 3); // @, #, $ がそれぞれエラートークンになる
     }
 }

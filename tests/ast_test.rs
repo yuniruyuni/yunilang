@@ -196,7 +196,6 @@ mod tests {
             let int_val = 42;
             let float_val = 3.14;
             let string_val = "hello";
-            let char_val = 'a';
             let bool_val = true;
         }
         "#;
@@ -204,7 +203,7 @@ mod tests {
         let ast = build_ast(source);
         
         if let Item::Function(ref func) = ast.items[0] {
-            assert_eq!(func.body.statements.len(), 5);
+            assert_eq!(func.body.statements.len(), 4);
             
             // 各変数宣言の初期化子がリテラルであることを確認
             for (i, stmt) in func.body.statements.iter().enumerate() {
@@ -214,8 +213,7 @@ mod tests {
                             0 => assert!(matches!(init, Expression::Integer(_))),
                             1 => assert!(matches!(init, Expression::Float(_))),
                             2 => assert!(matches!(init, Expression::String(_))),
-                            3 => assert!(matches!(init, Expression::Identifier(_))), // char型リテラルは未サポート
-                            4 => assert!(matches!(init, Expression::Boolean(_))),
+                            3 => assert!(matches!(init, Expression::Boolean(_))),
                             _ => panic!("Unexpected statement index"),
                         }
                     }

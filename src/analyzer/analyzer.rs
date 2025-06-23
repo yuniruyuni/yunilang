@@ -691,14 +691,7 @@ impl SemanticAnalyzer {
         if let Expression::Identifier(ident) = call.callee.as_ref() {
             // println関数の特別な処理（任意の数の引数と型を受け入れる）
             if ident.name == "println" {
-                // 最低1つの引数が必要
-                if call.args.is_empty() {
-                    return Err(AnalysisError::ArgumentCountMismatch {
-                        expected: 1,
-                        found: 0,
-                        span: call.span,
-                    });
-                }
+                // 引数がない場合は改行のみを出力
                 // 全ての引数の型を解析するが、型チェックはしない（任意の型を受け入れる）
                 for arg in &call.args {
                     self.analyze_expression(arg)?;

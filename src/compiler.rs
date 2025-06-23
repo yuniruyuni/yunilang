@@ -133,8 +133,13 @@ impl<'ctx> CompilationPipeline<'ctx> {
         // レキサーエラーをチェック
         for token in &tokens {
             if matches!(token.token, Token::Error) {
+                // エラートークンの位置から実際の文字を取得
+                let error_text = self.state.source.get(token.span.clone())
+                    .unwrap_or("不明")
+                    .to_string();
+                
                 self.state.add_error(YuniError::Lexer(LexerError::UnrecognizedToken {
-                    token: "不明".to_string(),
+                    token: error_text,
                     span: token.span.clone().into(),
                 }));
             }

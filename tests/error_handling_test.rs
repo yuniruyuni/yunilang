@@ -21,7 +21,7 @@ fn main() {
     
     // エラーが収集されていることを確認
     assert!(pipeline.state().has_errors());
-    assert_eq!(pipeline.state().error_count(), 1);
+    assert_eq!(pipeline.state().error_count(), 3); // @, #, $ の3つのエラー
 }
 
 #[test]
