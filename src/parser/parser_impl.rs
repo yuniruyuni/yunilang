@@ -191,4 +191,15 @@ impl Parser {
             .unwrap_or_else(|| "EOF".to_string());
         self.error(format!("Unexpected token: {}", token))
     }
+
+    /// テンプレート文字列の補間式をパース
+    pub(super) fn parse_template_string_interpolation(&mut self, expr_str: &str) -> ParseResult<Expression> {
+        // 補間式のトークン化
+        let lexer = crate::lexer::Lexer::new(expr_str);
+        let tokens = lexer.collect_tokens();
+        
+        // 新しいパーサーで式を解析
+        let mut parser = Parser::new(tokens);
+        parser.parse_expression_internal()
+    }
 }

@@ -30,7 +30,7 @@ impl SemanticAnalyzer {
             Expression::MethodCall(method_call) => self.analyze_method_call_expression(method_call),
             Expression::If(if_expr) => self.analyze_if_expression(if_expr),
             Expression::Block(block_expr) => self.analyze_block_expression(block_expr),
-            Expression::TemplateString(_) => Ok(Type::String),
+            Expression::TemplateString(template) => self.analyze_template_string(template),
             Expression::Path(path_expr) => self.analyze_path_expression(path_expr),
             Expression::Index(index_expr) => self.analyze_index_expression(index_expr),
             Expression::Reference(ref_expr) => self.analyze_reference_expression(ref_expr),
@@ -315,5 +315,19 @@ impl SemanticAnalyzer {
         }
         
         Ok(Type::Array(Box::new(first_element_type)))
+    }
+
+    /// テンプレート文字列の解析
+    fn analyze_template_string(&mut self, template: &TemplateStringLit) -> AnalysisResult<Type> {
+        // 各補間式の型を解析
+        for part in &template.parts {
+            if let TemplateStringPart::Interpolation(expr) = part {
+                // 補間式の型を解析（任意の型を許可）
+                self.analyze_expression(expr)?;
+            }
+        }
+        
+        // テンプレート文字列の結果型は常にString
+        Ok(Type::String)
     }
 }

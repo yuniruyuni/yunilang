@@ -96,6 +96,15 @@ impl<'ctx> RuntimeManager<'ctx> {
         self.functions.insert("yuni_string_concat".to_string(), concat);
         
         // 型変換関数
+        // int to string (汎用整数変換)
+        let int_to_string_type = i8_ptr_type.fn_type(&[i64_type.into()], false);
+        let int_to_string = module.add_function(
+            "yuni_int_to_string",
+            int_to_string_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_int_to_string".to_string(), int_to_string);
+        
         // i64 to string
         let i64_to_string_type = i8_ptr_type.fn_type(&[i64_type.into()], false);
         let i64_to_string = module.add_function(
@@ -104,6 +113,15 @@ impl<'ctx> RuntimeManager<'ctx> {
             Some(Linkage::External),
         );
         self.functions.insert("yuni_i64_to_string".to_string(), i64_to_string);
+        
+        // float to string (汎用浮動小数点変換)
+        let float_to_string_type = i8_ptr_type.fn_type(&[f64_type.into()], false);
+        let float_to_string = module.add_function(
+            "yuni_float_to_string",
+            float_to_string_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_float_to_string".to_string(), float_to_string);
         
         // f64 to string
         let f64_to_string_type = i8_ptr_type.fn_type(&[f64_type.into()], false);

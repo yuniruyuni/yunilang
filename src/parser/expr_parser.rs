@@ -437,8 +437,78 @@ impl Parser {
                 let value = value.clone();
                 let span = self.current_span();
                 self.advance();
-                // TODO: テンプレート文字列の適切な解析
-                Ok(Expression::String(StringLit { value, span: span.into() }))
+                
+                // テンプレート文字列をパース
+                let mut parts = Vec::new();
+                let mut current_text = String::new();
+                let mut chars = value.chars().peekable();
+                
+                while let Some(ch) = chars.next() {
+                    if ch == '$' && chars.peek() == Some(&'{') {
+                        // 補間式の開始
+                        chars.next(); // '{'をスキップ
+                        
+                        // 現在のテキストを保存
+                        if !current_text.is_empty() {
+                            parts.push(TemplateStringPart::Text(current_text.clone()));
+                            current_text.clear();
+                        }
+                        
+                        // 補間式を収集
+                        let mut expr_str = String::new();
+                        let mut brace_count = 1;
+                        
+                        while brace_count > 0 {
+                            match chars.next() {
+                                Some('{') => {
+                                    brace_count += 1;
+                                    expr_str.push('{');
+                                }
+                                Some('}') => {
+                                    brace_count -= 1;
+                                    if brace_count > 0 {
+                                        expr_str.push('}');
+                                    }
+                                }
+                                Some(c) => expr_str.push(c),
+                                None => {
+                                    return Err(self.error("Unterminated interpolation in template string".to_string()));
+                                }
+                            }
+                        }
+                        
+                        // 補間式をパース
+                        let expr = self.parse_template_string_interpolation(&expr_str)?;
+                        parts.push(TemplateStringPart::Interpolation(expr));
+                    } else if ch == '\\' {
+                        // エスケープシーケンス
+                        match chars.next() {
+                            Some('n') => current_text.push('\n'),
+                            Some('r') => current_text.push('\r'),
+                            Some('t') => current_text.push('\t'),
+                            Some('\\') => current_text.push('\\'),
+                            Some('`') => current_text.push('`'),
+                            Some('$') => current_text.push('$'),
+                            Some(c) => {
+                                current_text.push('\\');
+                                current_text.push(c);
+                            }
+                            None => current_text.push('\\'),
+                        }
+                    } else {
+                        current_text.push(ch);
+                    }
+                }
+                
+                // 残りのテキストを保存
+                if !current_text.is_empty() {
+                    parts.push(TemplateStringPart::Text(current_text));
+                }
+                
+                Ok(Expression::TemplateString(TemplateStringLit { 
+                    parts, 
+                    span: span.into() 
+                }))
             }
             Some(Token::True) => {
                 let span = self.current_span();

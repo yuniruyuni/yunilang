@@ -10,8 +10,55 @@ use crate::codegen::code_generator::CodeGenerator;
 impl<'ctx> CodeGenerator<'ctx> {
     /// 値を文字列に変換
     pub fn value_to_string(&mut self, value: BasicValueEnum<'ctx>) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Ok(value)
+        match value {
+            BasicValueEnum::IntValue(int_val) => {
+                // 整数を文字列に変換
+                let to_string_fn = self.runtime_manager.get_function("yuni_int_to_string")
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: "Runtime function yuni_int_to_string not found".to_string(),
+                    }))?;
+                
+                let result = self.builder.build_call(
+                    to_string_fn,
+                    &[int_val.into()],
+                    "int_to_string_result",
+                )?.try_as_basic_value().left()
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: "yuni_int_to_string should return a value".to_string(),
+                    }))?;
+                
+                Ok(result)
+            }
+            BasicValueEnum::FloatValue(float_val) => {
+                // 浮動小数点を文字列に変換
+                let to_string_fn = self.runtime_manager.get_function("yuni_float_to_string")
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: "Runtime function yuni_float_to_string not found".to_string(),
+                    }))?;
+                
+                let result = self.builder.build_call(
+                    to_string_fn,
+                    &[float_val.into()],
+                    "float_to_string_result",
+                )?.try_as_basic_value().left()
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: "yuni_float_to_string should return a value".to_string(),
+                    }))?;
+                
+                Ok(result)
+            }
+            BasicValueEnum::PointerValue(_) => {
+                // ポインタ値（文字列を含む）はそのまま返す
+                Ok(value)
+            }
+            _ => {
+                // その他の型は未実装
+                Err(YuniError::Codegen(CodegenError::Unimplemented {
+                    feature: format!("String conversion for type {:?} not implemented", value.get_type()),
+                    span: Span::dummy(),
+                }))
+            }
+        }
     }
 
     /// 値を指定された型に変換
