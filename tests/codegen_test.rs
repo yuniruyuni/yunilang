@@ -782,4 +782,46 @@ mod tests {
         assert!(ir.contains("ret i64 1") || ir.contains("ret i64 %"), "test_i64 should return i64 value");
         assert!(ir.contains("ret i8 127") || ir.contains("ret i8 %"), "test_i8 should return i8 value");
     }
+
+    #[test]
+    fn test_reference_expressions() {
+        let source = r#"
+            package test_ref
+
+            fn test_ref(): i32 {
+                let x = 42;
+                let ref_x = &x;
+                let deref_x = *ref_x;
+                return deref_x;
+            }
+            
+            fn test_mut_ref(): i32 {
+                let mut x = 42;
+                let ref_x = &x;
+                return *ref_x;
+            }
+            
+            fn test_simple_ref(): i32 {
+                let x = 100;
+                let y = &x;
+                let z = *y;
+                return z;
+            }
+            
+            struct Point {
+                x: i32,
+                y: i32,
+            }
+        "#;
+
+        let result = compile_to_ir(source, "test_reference");
+        assert!(result.is_ok(), "Compilation should succeed: {:?}", result.unwrap_err());
+        
+        let ir = result.unwrap();
+        
+        // 参照の取得とデリファレンスの確認
+        assert!(ir.contains("alloca i32"), "Should allocate space for x");
+        assert!(ir.contains("store i32"), "Should store value to x");
+        assert!(ir.contains("load i32"), "Should load value through reference");
+    }
 }

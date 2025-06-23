@@ -367,6 +367,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .collect::<YuniResult<Vec<_>>>()?;
                 Ok(Type::Tuple(element_types))
             }
+            Expression::Reference(ref_expr) => {
+                // 参照式の型は、内部式の型をReference型でラップしたもの
+                let inner_type = self.expression_type(&ref_expr.expr)?;
+                Ok(Type::Reference(Box::new(inner_type), ref_expr.is_mut))
+            }
+            Expression::Dereference(deref_expr) => {
+                // 参照外し式の型は、参照型の内部型
+                let expr_type = self.expression_type(&deref_expr.expr)?;
+                match expr_type {
+                    Type::Reference(inner, _is_mut) => Ok(*inner),
+                    _ => Err(YuniError::Codegen(CodegenError::TypeError {
+                        expected: "reference type".to_string(),
+                        actual: format!("{:?}", expr_type),
+                        span: deref_expr.span,
+                    })),
+                }
+            }
             _ => Err(YuniError::Codegen(CodegenError::Unimplemented {
                 feature: "Type inference not implemented for this expression".to_string(),
                 span: expr.span(),
