@@ -132,11 +132,72 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// メソッド呼び出し式をコンパイル
     pub fn compile_method_call(&mut self, method_call: &MethodCallExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Method calls not yet implemented".to_string(),
-            span: method_call.span,
-        }))
+        // オブジェクトの式をコンパイル
+        let object_value = self.compile_expression(&method_call.object)?;
+        
+        // オブジェクトの型を推論
+        let object_type = self.expression_type(&method_call.object)?;
+        
+        // 構造体名を取得
+        let struct_name = match &object_type {
+            Type::UserDefined(name) => name.clone(),
+            Type::Reference(inner, _is_mut) => {
+                if let Type::UserDefined(name) = inner.as_ref() {
+                    name.clone()
+                } else {
+                    return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "Method call on non-struct type".to_string(),
+                        span: method_call.span,
+                    }));
+                }
+            }
+            _ => {
+                return Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "Method call on non-struct type".to_string(),
+                    span: method_call.span,
+                }));
+            }
+        };
+        
+        // 構造体のメソッドを検索
+        let methods = self.struct_methods.get(&struct_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: format!("No methods found for type {}", struct_name),
+                span: method_call.span,
+            }))?;
+        
+        // メソッドを探す
+        let (_, mangled_name) = methods.iter()
+            .find(|(method_name, _)| method_name == &method_call.method)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: format!("Method '{}' not found for type '{}'", method_call.method, struct_name),
+                span: method_call.span,
+            }))?;
+        
+        // 関数を取得（コピーして借用を解放）
+        let func = *self.functions.get(mangled_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: format!("Method function '{}' not found", mangled_name),
+            }))?;
+        
+        // 引数を準備（最初の引数はレシーバー）
+        let mut args = vec![object_value.into()];
+        
+        // 残りの引数をコンパイル
+        for arg in &method_call.args {
+            let arg_value = self.compile_expression(arg)?;
+            args.push(arg_value.into());
+        }
+        
+        // メソッドを呼び出し
+        let call_result = self.builder.build_call(func, &args, "method_call_result")?;
+        
+        if let Some(value) = call_result.try_as_basic_value().left() {
+            Ok(value)
+        } else {
+            // voidを返す関数の場合
+            Ok(self.context.i32_type().const_zero().into())
+        }
     }
 
     /// インデックスアクセス式をコンパイル

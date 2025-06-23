@@ -396,6 +396,54 @@ impl<'ctx> CodeGenerator<'ctx> {
                     })),
                 }
             }
+            Expression::MethodCall(method_call) => {
+                // メソッド呼び出しの型は、メソッドの戻り値型
+                let object_type = self.expression_type(&method_call.object)?;
+                
+                // 構造体名を取得
+                let struct_name = match &object_type {
+                    Type::UserDefined(name) => name.clone(),
+                    Type::Reference(inner, _is_mut) => {
+                        if let Type::UserDefined(name) = inner.as_ref() {
+                            name.clone()
+                        } else {
+                            return Err(YuniError::Codegen(CodegenError::InvalidType {
+                                message: "Method call on non-struct type".to_string(),
+                                span: method_call.span,
+                            }));
+                        }
+                    }
+                    _ => {
+                        return Err(YuniError::Codegen(CodegenError::InvalidType {
+                            message: "Method call on non-struct type".to_string(),
+                            span: method_call.span,
+                        }));
+                    }
+                };
+                
+                // メソッドの関数名を取得
+                let methods = self.struct_methods.get(&struct_name)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                        name: format!("No methods found for type {}", struct_name),
+                        span: method_call.span,
+                    }))?;
+                
+                let (_, mangled_name) = methods.iter()
+                    .find(|(method_name, _)| method_name == &method_call.method)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                        name: format!("Method '{}' not found for type '{}'", method_call.method, struct_name),
+                        span: method_call.span,
+                    }))?;
+                
+                // メソッドの戻り値型を取得
+                if let Some(return_type) = self.function_types.get(mangled_name) {
+                    Ok(return_type.clone())
+                } else {
+                    Err(YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Method return type not found for '{}'", mangled_name),
+                    }))
+                }
+            }
             _ => Err(YuniError::Codegen(CodegenError::Unimplemented {
                 feature: "Type inference not implemented for this expression".to_string(),
                 span: expr.span(),

@@ -36,6 +36,9 @@ pub struct CodeGenerator<'ctx> {
     // 構造体のフィールド情報
     pub struct_info: HashMap<String, StructInfo>,
     
+    // 構造体のメソッド情報 (構造体名 -> Vec<(メソッド名, 関数名)>)
+    pub struct_methods: HashMap<String, Vec<(String, String)>>,
+    
     // Enumのバリアント情報（名前 -> (Enum名, バリアントインデックス)）
     pub enum_variants: HashMap<(String, String), u32>,
 
@@ -76,6 +79,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             functions: HashMap::new(),
             function_types: HashMap::new(),
             struct_info: HashMap::new(),
+            struct_methods: HashMap::new(),
             enum_variants: HashMap::new(),
             current_function: None,
             current_return_type: None,
@@ -217,7 +221,13 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         let function = self.module.add_function(&method_name, fn_type, None);
         self.functions.insert(method_name.clone(), function);
-        self.function_types.insert(method_name, return_type.clone());
+        self.function_types.insert(method_name.clone(), return_type.clone());
+        
+        // 構造体とメソッドの関連を保存
+        self.struct_methods
+            .entry(receiver_type_name.clone())
+            .or_default()
+            .push((method.name.clone(), method_name));
 
         Ok(())
     }
