@@ -4,6 +4,7 @@ use crate::ast::{TemplateStringLit, TemplateStringPart, Expression, Span};
 use crate::error::ParserError;
 
 /// テンプレート文字列をパース
+#[allow(dead_code)]
 pub fn parse_template_string(input: &str, span: Span) -> Result<TemplateStringLit, ParserError> {
     let mut parts = Vec::new();
     let mut current_text = String::new();
@@ -83,6 +84,7 @@ pub fn parse_template_string(input: &str, span: Span) -> Result<TemplateStringLi
 }
 
 /// テンプレート文字列の補間部分を識別するためのヘルパー関数
+#[allow(dead_code)]
 pub fn find_interpolations(input: &str) -> Vec<(usize, usize)> {
     let mut positions = Vec::new();
     let mut chars = input.char_indices().peekable();

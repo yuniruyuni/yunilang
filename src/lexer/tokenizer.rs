@@ -53,6 +53,7 @@ impl<'a> Lexer<'a> {
 }
 
 /// ソースコードをトークン化
+#[allow(dead_code)]
 pub fn tokenize(input: &str) -> Vec<TokenWithPosition> {
     let mut tokens = Vec::new();
     let mut lexer = Token::lexer(input);
@@ -96,6 +97,7 @@ pub fn tokenize(input: &str) -> Vec<TokenWithPosition> {
 }
 
 /// デバッグ用：トークンストリームを文字列として出力
+#[allow(dead_code)]
 pub fn format_tokens(tokens: &[TokenWithPosition]) -> String {
     tokens
         .iter()

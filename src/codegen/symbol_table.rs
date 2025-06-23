@@ -41,6 +41,7 @@ impl<'ctx> Scope<'ctx> {
     }
     
     /// シンボルを検索（可変参照）
+    #[allow(dead_code)]
     pub fn lookup_mut(&mut self, name: &str) -> Option<&mut Symbol<'ctx>> {
         self.symbols.get_mut(name)
     }
@@ -137,6 +138,7 @@ impl<'ctx> ScopeManager<'ctx> {
     }
     
     /// 現在のスコープから変数を検索
+    #[allow(dead_code)]
     pub fn lookup_in_current_scope(&self, name: &str) -> Option<&Symbol<'ctx>> {
         self.scopes.last()?.lookup(name)
     }

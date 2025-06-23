@@ -45,6 +45,7 @@ impl CompilationState {
     }
     
     /// 文字列からコンパイル状態を作成（テスト用）
+    #[allow(dead_code)]
     pub fn new_from_string(filename: &str, source: String) -> YuniResult<Self> {
         let mut files = SimpleFiles::new();
         let file_id = files.add(filename.to_string(), source.clone());
@@ -203,6 +204,7 @@ impl<'ctx> CompilationPipeline<'ctx> {
     }
 
     /// パイプライン全体を実行
+    #[allow(dead_code)]
     pub fn run(&mut self) -> YuniResult<Option<CodeGenerator<'ctx>>> {
         // レキシカル解析
         let tokens = self.tokenize();
@@ -237,6 +239,7 @@ impl<'ctx> CompilationPipeline<'ctx> {
     }
 
     /// 状態への可変参照を取得
+    #[allow(dead_code)]
     pub fn state_mut(&mut self) -> &mut CompilationState {
         &mut self.state
     }

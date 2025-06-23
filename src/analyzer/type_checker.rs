@@ -148,6 +148,7 @@ impl TypeChecker {
     }
     
     /// 型の文字列表現を取得
+    #[allow(clippy::only_used_in_recursion)]
     pub fn type_to_string(&self, ty: &Type) -> String {
         match ty {
             Type::I8 => "i8".to_string(),
@@ -381,6 +382,7 @@ impl TypeChecker {
     }
     
     /// 型の互換性をチェック（内部実装）
+    #[allow(clippy::only_used_in_recursion)]
     fn types_compatible_internal(&self, expected: &Type, actual: &Type) -> bool {
         match (expected, actual) {
             // 同じ型は互換

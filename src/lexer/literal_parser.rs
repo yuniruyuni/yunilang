@@ -80,6 +80,7 @@ pub fn unescape_string(s: &str) -> String {
 }
 
 /// 整数リテラルを解析（型サフィックス付き）
+#[allow(dead_code)]
 pub fn parse_integer_with_suffix(s: &str) -> Option<(i128, Option<String>)> {
     // 型サフィックスを見つける
     let suffixes = [
@@ -100,6 +101,7 @@ pub fn parse_integer_with_suffix(s: &str) -> Option<(i128, Option<String>)> {
 }
 
 /// 浮動小数点リテラルを解析（型サフィックス付き）
+#[allow(dead_code)]
 pub fn parse_float_with_suffix(s: &str) -> Option<(f64, Option<String>)> {
     // 型サフィックスを見つける
     let suffixes = ["f8", "f16", "f32", "f64"];

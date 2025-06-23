@@ -45,6 +45,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// 整数リテラルをコンパイル（期待される型のコンテキストなし）
+    #[allow(dead_code)]
     pub fn compile_integer_literal(&self, lit: &IntegerLit) -> YuniResult<BasicValueEnum<'ctx>> {
         self.compile_integer_literal_with_type(lit, None)
     }

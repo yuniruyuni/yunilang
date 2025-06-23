@@ -83,6 +83,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
     
     /// LLVMモジュールを取得
+    #[allow(dead_code)]
     pub fn get_module(&self) -> &Module<'ctx> {
         &self.module
     }

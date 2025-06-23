@@ -474,6 +474,7 @@ impl From<std::io::Error> for YuniError {
 
 /// エラーコンテキスト追加用のヘルパートレイト
 pub trait WithContext<T> {
+    #[allow(dead_code)]
     fn with_context<F>(self, f: F) -> YuniResult<T>
     where
         F: FnOnce() -> String;

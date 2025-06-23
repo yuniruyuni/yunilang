@@ -165,6 +165,7 @@ impl<'ctx> RuntimeManager<'ctx> {
     }
     
     /// 新しいランタイム関数を追加
+    #[allow(dead_code)]
     pub fn add_function(&mut self, name: String, function: FunctionValue<'ctx>) {
         self.functions.insert(name, function);
     }

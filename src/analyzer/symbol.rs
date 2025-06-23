@@ -9,6 +9,7 @@ pub type AnalysisResult<T> = Result<T, AnalysisError>;
 
 /// シンボル情報
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Symbol {
     pub name: String,
     pub ty: Type,
@@ -24,6 +25,7 @@ pub struct Symbol {
 
 /// 関数シグネチャ情報
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FunctionSignature {
     pub name: String,
     pub params: Vec<(String, Type)>,
@@ -52,6 +54,7 @@ pub enum TypeKind {
 
 /// ライフタイムID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum LifetimeId {
     Static,
     Named(usize),
@@ -59,6 +62,7 @@ pub enum LifetimeId {
 
 /// 借用情報
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct BorrowInfo {
     pub kind: BorrowKind,
     pub lifetime: LifetimeId,
@@ -87,6 +91,7 @@ impl Scope {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_parent(parent: Scope) -> Self {
         Self {
             symbols: HashMap::new(),
@@ -112,6 +117,7 @@ impl Scope {
             .or_else(|| self.parent.as_ref().and_then(|parent| parent.lookup(name)))
     }
 
+    #[allow(dead_code)]
     pub fn lookup_mut(&mut self, name: &str) -> Option<&mut Symbol> {
         if self.symbols.contains_key(name) {
             self.symbols.get_mut(name)
@@ -120,6 +126,7 @@ impl Scope {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_moved(&mut self, name: &str) -> AnalysisResult<()> {
         match self.lookup_mut(name) {
             Some(symbol) => {
@@ -133,6 +140,7 @@ impl Scope {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_borrowed(&mut self, name: &str, borrow_info: BorrowInfo) -> AnalysisResult<()> {
         match self.lookup_mut(name) {
             Some(symbol) => {

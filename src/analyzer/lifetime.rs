@@ -7,6 +7,7 @@ use super::symbol::{AnalysisError, AnalysisResult, BorrowInfo, BorrowKind, Lifet
 
 /// ライフタイム情報
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Lifetime {
     /// ライフタイムID
     pub id: LifetimeId,
@@ -26,6 +27,7 @@ pub struct ScopeId(pub usize);
 
 /// 変数の使用情報
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct VariableUsage {
     /// 使用の種類
     pub usage_kind: UsageKind,
@@ -37,6 +39,7 @@ pub struct VariableUsage {
 
 /// 変数の使用種類
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum UsageKind {
     /// 読み取り
     Read,
@@ -50,6 +53,7 @@ pub enum UsageKind {
 
 /// ライフタイム制約の種類
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum LivesConstraint {
     /// 'a: 'b (aはbより長く生きる必要がある)
     Outlives {
@@ -67,6 +71,7 @@ pub enum LivesConstraint {
 
 /// ライフタイム分析のコンテキスト
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct LifetimeContext {
     /// 全てのライフタイム
     pub lifetimes: HashMap<LifetimeId, Lifetime>,
@@ -86,6 +91,7 @@ pub struct LifetimeContext {
     pub variable_usage: HashMap<String, Vec<VariableUsage>>,
 }
 
+#[allow(dead_code)]
 impl LifetimeContext {
     pub fn new() -> Self {
         let mut ctx = Self {

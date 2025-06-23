@@ -6,15 +6,18 @@ use super::lifetime::{LifetimeContext, UsageKind};
 use super::symbol::{AnalysisError, AnalysisResult, BorrowInfo, BorrowKind, Scope};
 
 /// 借用チェッカー
+#[allow(dead_code)]
 pub struct BorrowChecker<'a> {
     /// ライフタイムコンテキスト
     lifetime_ctx: &'a mut LifetimeContext,
     /// 現在のスコープ
+    #[allow(dead_code)]
     current_scope: &'a mut Scope,
     /// エラーコレクタ
     errors: Vec<AnalysisError>,
 }
 
+#[allow(dead_code)]
 impl<'a> BorrowChecker<'a> {
     pub fn new(lifetime_ctx: &'a mut LifetimeContext, current_scope: &'a mut Scope) -> Self {
         Self {
@@ -406,6 +409,7 @@ impl<'a> BorrowChecker<'a> {
     }
 
     /// パターンに含まれる変数を登録
+    #[allow(clippy::only_used_in_recursion)]
     fn register_pattern(&mut self, pattern: &Pattern) -> AnalysisResult<()> {
         match pattern {
             Pattern::Identifier(_name, _) => {

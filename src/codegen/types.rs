@@ -151,6 +151,7 @@ impl<'ctx> TypeManager<'ctx> {
     }
     
     /// 型がプリミティブ型かチェック
+    #[allow(dead_code)]
     pub fn is_primitive_type(ty: &Type) -> bool {
         matches!(
             ty,
@@ -162,6 +163,7 @@ impl<'ctx> TypeManager<'ctx> {
     }
     
     /// 型が整数型かチェック
+    #[allow(dead_code)]
     pub fn is_integer_type(ty: &Type) -> bool {
         matches!(
             ty,
@@ -171,6 +173,7 @@ impl<'ctx> TypeManager<'ctx> {
     }
     
     /// 型が符号付き整数型かチェック
+    #[allow(dead_code)]
     pub fn is_signed_integer(ty: &Type) -> bool {
         matches!(
             ty,
@@ -179,6 +182,7 @@ impl<'ctx> TypeManager<'ctx> {
     }
     
     /// 型が浮動小数点型かチェック
+    #[allow(dead_code)]
     pub fn is_float_type(ty: &Type) -> bool {
         matches!(ty, Type::F8 | Type::F16 | Type::F32 | Type::F64)
     }

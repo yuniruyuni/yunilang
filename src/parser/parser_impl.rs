@@ -192,6 +192,7 @@ impl Parser {
     }
 
     /// 予期しないトークンエラーを作成
+    #[allow(dead_code)]
     pub(super) fn unexpected_token(&self) -> ParseError {
         let token = self
             .current_token()
