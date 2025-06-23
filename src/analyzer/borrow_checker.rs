@@ -103,12 +103,28 @@ impl<'a> BorrowChecker<'a> {
                 
                 // 既存の借用との競合をチェック
                 if let Some(existing_borrow) = &symbol.borrow_info {
-                    if is_mutable || existing_borrow.kind == BorrowKind::Mutable {
+                    // 可変借用は常に排他的
+                    if is_mutable && existing_borrow.kind == BorrowKind::Mutable {
                         return Err(AnalysisError::MultipleMutableBorrows {
                             name: id.name.to_string(),
                             span: *span,
                         });
                     }
+                    // 既存が可変借用の場合、新しい借用（共有・可変問わず）は不可
+                    if existing_borrow.kind == BorrowKind::Mutable {
+                        return Err(AnalysisError::MultipleMutableBorrows {
+                            name: id.name.to_string(),
+                            span: *span,
+                        });
+                    }
+                    // 新しい借用が可変の場合、既存の共有借用があってもエラー
+                    if is_mutable {
+                        return Err(AnalysisError::MultipleMutableBorrows {
+                            name: id.name.to_string(),
+                            span: *span,
+                        });
+                    }
+                    // 共有借用同士は許可（何もしない）
                 }
                 
                 // 新しい借用を記録
@@ -241,12 +257,31 @@ impl<'a> BorrowChecker<'a> {
         match expr {
             Expression::Identifier(id) => {
                 if let Some(symbol) = self.current_scope.lookup(&id.name) {
-                    // 参照型でない場合は移動
-                    !matches!(symbol.ty, Type::Reference(_, _))
+                    // 参照型は移動しない
+                    if matches!(symbol.ty, Type::Reference(_, _)) {
+                        return false;
+                    }
+                    // コピー可能な型は移動しない
+                    !self.is_copy_type(&symbol.ty)
                 } else {
                     false
                 }
             }
+            _ => false,
+        }
+    }
+    
+    /// 型がコピー可能かチェック
+    fn is_copy_type(&self, ty: &Type) -> bool {
+        match ty {
+            // プリミティブ型はコピー可能
+            Type::I8 | Type::I16 | Type::I32 | Type::I64 |
+            Type::U8 | Type::U16 | Type::U32 | Type::U64 |
+            Type::F32 | Type::F64 |
+            Type::Bool => true,
+            // 参照型もコピー可能（参照自体がコピーされる）
+            Type::Reference(_, _) => true,
+            // その他の型（文字列、配列、構造体など）は移動
             _ => false,
         }
     }
@@ -257,6 +292,14 @@ impl<'a> BorrowChecker<'a> {
             if let Some(symbol) = self.current_scope.lookup(&id.name) {
                 if symbol.is_moved {
                     return Err(AnalysisError::UseAfterMove {
+                        name: id.name.to_string(),
+                        span: id.span,
+                    });
+                }
+                
+                // 借用中の変数は移動できない
+                if symbol.borrow_info.is_some() {
+                    return Err(AnalysisError::MoveWhileBorrowed {
                         name: id.name.to_string(),
                         span: id.span,
                     });

@@ -3,7 +3,7 @@
 use crate::ast::*;
 use crate::analyzer::symbol::{AnalysisError, AnalysisResult, Symbol};
 use super::SemanticAnalyzer;
-// use crate::analyzer::borrow_checker::BorrowChecker;
+use crate::analyzer::borrow_checker::BorrowChecker;
 
 impl SemanticAnalyzer {
     /// インポートを処理
@@ -79,13 +79,19 @@ impl SemanticAnalyzer {
         }
 
         // 借用チェック
-        // TODO: BorrowCheckerの統合
-        // let mut borrow_checker = BorrowChecker::new(&mut self.lifetime_context, self.scope_stack.last_mut().unwrap());
-        // for stmt in &func.body.statements {
-        //     if let Err(e) = borrow_checker.check_statement(stmt) {
-        //         self.errors.push(e);
-        //     }
-        // }
+        {
+            let current_scope = self.scope_stack.last_mut().unwrap();
+            let mut borrow_checker = BorrowChecker::new(&mut self.lifetime_context, current_scope);
+            for stmt in &func.body.statements {
+                if let Err(e) = borrow_checker.check_statement(stmt) {
+                    self.errors.push(e);
+                }
+            }
+            // 借用チェックの最終検証
+            if let Err(e) = borrow_checker.check() {
+                self.errors.push(e);
+            }
+        }
 
         self.current_return_type = None;
         self.exit_scope();
@@ -169,6 +175,21 @@ impl SemanticAnalyzer {
                 name: method.name.clone(),
                 span: method.span,
             });
+        }
+
+        // 借用チェック
+        {
+            let current_scope = self.scope_stack.last_mut().unwrap();
+            let mut borrow_checker = BorrowChecker::new(&mut self.lifetime_context, current_scope);
+            for stmt in &method.body.statements {
+                if let Err(e) = borrow_checker.check_statement(stmt) {
+                    self.errors.push(e);
+                }
+            }
+            // 借用チェックの最終検証
+            if let Err(e) = borrow_checker.check() {
+                self.errors.push(e);
+            }
         }
 
         self.current_return_type = None;
