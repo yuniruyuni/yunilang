@@ -75,11 +75,36 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// タプル式をコンパイル
     pub fn compile_tuple_expr(&mut self, tuple: &TupleExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Tuple expressions not yet implemented".to_string(),
-            span: tuple.span,
-        }))
+        // 各要素をコンパイル
+        let mut compiled_elements = Vec::new();
+        let mut element_types = Vec::new();
+        
+        for element in &tuple.elements {
+            let value = self.compile_expression(element)?;
+            element_types.push(value.get_type());
+            compiled_elements.push(value);
+        }
+        
+        // タプル構造体の型を作成
+        let tuple_type = self.context.struct_type(&element_types, false);
+        
+        // スタック上にタプルを割り当て
+        let tuple_alloca = self.builder.build_alloca(tuple_type, "tuple")?;
+        
+        // 各要素を構造体に格納
+        for (i, value) in compiled_elements.into_iter().enumerate() {
+            let field_ptr = self.builder.build_struct_gep(
+                tuple_type,
+                tuple_alloca,
+                i as u32,
+                &format!("tuple_field_{}", i)
+            )?;
+            self.builder.build_store(field_ptr, value)?;
+        }
+        
+        // タプル全体を値として返す
+        let tuple_value = self.builder.build_load(tuple_type, tuple_alloca, "tuple_value")?;
+        Ok(tuple_value)
     }
 
     /// キャスト式をコンパイル

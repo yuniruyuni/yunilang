@@ -647,6 +647,36 @@ mod tests {
     }
 
     #[test]
+    fn test_tuple_expressions() {
+        let source = r#"
+        package test
+
+        fn main() {
+            // 空のタプル
+            let empty = ();
+            
+            // 単一要素のタプル
+            let single = (42,);
+            
+            // 複数要素のタプル
+            let pair = (1, 2.5);
+            let triple = ("hello", 42, true);
+            
+            // ネストしたタプル
+            let nested = ((1, 2), (3, 4));
+        }
+        "#;
+        
+        let ir = compile_to_ir(source, "test_tuples").unwrap();
+        assert_valid_ir(&ir);
+        
+        // タプルが構造体として実装されていることを確認
+        assert!(ir.contains("alloca"), "IR should contain alloca for tuples");
+        assert!(ir.contains("getelementptr"), "IR should contain GEP for tuple field access");
+        assert!(ir.contains("store"), "IR should contain store instructions for tuple elements");
+    }
+
+    #[test]
     fn test_array_expressions() {
         let source = r#"
         package test
