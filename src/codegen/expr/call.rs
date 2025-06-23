@@ -141,11 +141,60 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// インデックスアクセス式をコンパイル
     pub fn compile_index_expr(&mut self, index: &IndexExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Index access not yet implemented".to_string(),
-            span: index.span,
-        }))
+        // オブジェクト（配列）の式をコンパイル
+        let object_value = self.compile_expression(&index.object)?;
+        
+        // インデックスの式をコンパイル
+        let index_value = self.compile_expression(&index.index)?;
+        
+        // オブジェクトの型を推論
+        let object_type = self.expression_type(&index.object)?;
+        
+        match &object_type {
+            Type::Array(element_type) => {
+                // 配列のインデックスアクセス
+                let array_ptr = object_value.into_pointer_value();
+                
+                // インデックスが整数型であることを確認
+                let index_int = index_value.into_int_value();
+                
+                // 要素のLLVM型を取得
+                let element_llvm_type = self.type_manager.ast_type_to_llvm(element_type)?;
+                
+                // GEPで要素のアドレスを計算
+                let element_ptr = unsafe {
+                    self.builder.build_gep(
+                        element_llvm_type,
+                        array_ptr,
+                        &[index_int],
+                        "element_ptr"
+                    )?
+                };
+                
+                // 値をロード
+                let value = self.builder.build_load(
+                    element_llvm_type,
+                    element_ptr,
+                    "element_value"
+                )?;
+                
+                Ok(value)
+            }
+            Type::String => {
+                // 文字列のインデックスアクセス（文字を取得）
+                // TODO: 実装が必要
+                Err(YuniError::Codegen(CodegenError::Unimplemented {
+                    feature: "String indexing not yet implemented".to_string(),
+                    span: index.span,
+                }))
+            }
+            _ => {
+                Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: format!("Cannot index into type: {:?}", object_type),
+                    span: index.span,
+                }))
+            }
+        }
     }
 
     /// フィールドアクセス式をコンパイル

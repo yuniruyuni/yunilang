@@ -824,4 +824,41 @@ mod tests {
         assert!(ir.contains("store i32"), "Should store value to x");
         assert!(ir.contains("load i32"), "Should load value through reference");
     }
+
+    #[test]
+    fn test_index_access() {
+        let source = r#"
+            package test_index
+
+            fn test_array_index(): i32 {
+                let arr = [10, 20, 30, 40, 50];
+                return arr[2];  // Should return 30
+            }
+            
+            fn test_array_index_ref(): i32 {
+                let arr = [100, 200, 300];
+                let ref_elem = &arr[1];
+                return *ref_elem;  // Should return 200
+            }
+            
+            fn test_array_index_expr(): i32 {
+                let arr = [5, 10, 15, 20];
+                let i = 3;
+                return arr[i];  // Should return 20
+            }
+        "#;
+
+        let result = compile_to_ir(source, "test_index");
+        assert!(result.is_ok(), "Compilation should succeed: {:?}", result.unwrap_err());
+        
+        let ir = result.unwrap();
+        
+        // インデックスアクセスの確認
+        assert!(ir.contains("getelementptr"), "Should use GEP for array indexing");
+        assert!(ir.contains("load i32"), "Should load value from array");
+        
+        // 配列の初期化を確認
+        assert!(ir.contains("malloc"), "Should allocate array on heap");
+        assert!(ir.contains("store i32 30"), "Should store array element 30");
+    }
 }

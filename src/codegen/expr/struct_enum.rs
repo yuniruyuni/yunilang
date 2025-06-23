@@ -237,10 +237,44 @@ impl<'ctx> CodeGenerator<'ctx> {
     
     /// インデックスへの参照を取得
     fn compile_index_reference(&mut self, index: &IndexExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 配列のインデックスアクセスが実装されたら、ここで参照を返す
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Index reference not yet implemented".to_string(),
-            span: index.span,
-        }))
+        // オブジェクト（配列）の式をコンパイル
+        let object_value = self.compile_expression(&index.object)?;
+        
+        // インデックスの式をコンパイル
+        let index_value = self.compile_expression(&index.index)?;
+        
+        // オブジェクトの型を推論
+        let object_type = self.expression_type(&index.object)?;
+        
+        match &object_type {
+            Type::Array(element_type) => {
+                // 配列のインデックスアクセス
+                let array_ptr = object_value.into_pointer_value();
+                
+                // インデックスが整数型であることを確認
+                let index_int = index_value.into_int_value();
+                
+                // 要素のLLVM型を取得
+                let element_llvm_type = self.type_manager.ast_type_to_llvm(element_type)?;
+                
+                // GEPで要素のアドレスを計算（参照として返す）
+                let element_ptr = unsafe {
+                    self.builder.build_gep(
+                        element_llvm_type,
+                        array_ptr,
+                        &[index_int],
+                        "element_ref"
+                    )?
+                };
+                
+                Ok(element_ptr.into())
+            }
+            _ => {
+                Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: format!("Cannot take reference to index of type: {:?}", object_type),
+                    span: index.span,
+                }))
+            }
+        }
     }
 }

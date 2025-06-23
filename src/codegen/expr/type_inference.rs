@@ -384,6 +384,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                     })),
                 }
             }
+            Expression::Index(index_expr) => {
+                // インデックスアクセスの型は配列の要素型
+                let object_type = self.expression_type(&index_expr.object)?;
+                match object_type {
+                    Type::Array(element_type) => Ok(*element_type),
+                    Type::String => Ok(Type::U8), // 文字列の要素はu8（バイト）
+                    _ => Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: format!("Cannot index into type: {:?}", object_type),
+                        span: index_expr.span,
+                    })),
+                }
+            }
             _ => Err(YuniError::Codegen(CodegenError::Unimplemented {
                 feature: "Type inference not implemented for this expression".to_string(),
                 span: expr.span(),
