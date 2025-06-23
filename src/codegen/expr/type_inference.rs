@@ -111,10 +111,31 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
     
     /// 整数型が符号付きかどうかを判定
-    pub fn is_signed_type(&self, _bit_width: u32) -> bool {
-        // TODO: 実際の型情報から符号の有無を判定すべき
-        // 現在は簡易実装として、すべて符号付きとして扱う
-        true
+    /// ビット幅から型を推測して判定する（非推奨）
+    pub fn is_signed_type(&self, bit_width: u32) -> bool {
+        // ビット幅だけでは正確な判定ができないため、デフォルトで符号付きとする
+        // より正確な判定にはType enumを使用すること
+        match bit_width {
+            8 | 16 | 32 | 64 | 128 => true, // デフォルトで符号付き
+            _ => true,
+        }
+    }
+    
+    /// 型が符号付き整数かどうかを判定（推奨）
+    pub fn is_signed_integer_type(&self, ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 | Type::I256
+        )
+    }
+    
+    /// 型が符号なし整数かどうかを判定
+    #[allow(dead_code)]
+    pub fn is_unsigned_integer_type(&self, ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 | Type::U256
+        )
     }
     
     /// 浮動小数点型の強制変換を行う
