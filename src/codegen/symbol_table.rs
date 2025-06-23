@@ -17,6 +17,12 @@ pub struct Scope<'ctx> {
     pub symbols: HashMap<String, Symbol<'ctx>>,
 }
 
+impl<'ctx> Default for Scope<'ctx> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'ctx> Scope<'ctx> {
     pub fn new() -> Self {
         Self {
@@ -49,6 +55,12 @@ pub struct StructInfo {
     pub field_types: Vec<Type>,
 }
 
+impl Default for StructInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StructInfo {
     pub fn new() -> Self {
         Self {
@@ -78,6 +90,12 @@ impl StructInfo {
 /// スコープマネージャー
 pub struct ScopeManager<'ctx> {
     scopes: Vec<Scope<'ctx>>,
+}
+
+impl<'ctx> Default for ScopeManager<'ctx> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'ctx> ScopeManager<'ctx> {

@@ -5,13 +5,13 @@
 
 mod decl_parser;
 mod expr_parser;
-mod parser;
+mod parser_impl;
 mod pattern_parser;
 mod stmt_parser;
 mod type_parser;
 
 // 公開API
-pub use parser::Parser;
+pub use parser_impl::Parser;
 
 // 後方互換性のための型エイリアス
 use crate::error::ParserError;

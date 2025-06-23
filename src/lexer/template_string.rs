@@ -1,7 +1,7 @@
 //! テンプレート文字列の処理
 
 use crate::ast::{TemplateStringLit, TemplateStringPart, Expression, Span};
-use crate::error::{ParserError, YuniError};
+use crate::error::ParserError;
 
 /// テンプレート文字列をパース
 pub fn parse_template_string(input: &str, span: Span) -> Result<TemplateStringLit, ParserError> {
@@ -51,7 +51,7 @@ pub fn parse_template_string(input: &str, span: Span) -> Result<TemplateStringLi
             parts.push(TemplateStringPart::Interpolation(
                 Expression::Identifier(crate::ast::Identifier {
                     name: format!("${{{}}}", expr_str),
-                    span: span.clone(),
+                    span,
                 })
             ));
         } else if ch == '\\' {

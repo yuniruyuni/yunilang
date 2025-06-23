@@ -195,7 +195,7 @@ impl<'a> BorrowChecker<'a> {
     }
 
     /// 関数呼び出しのチェック
-    fn check_call(&mut self, callee: &Expression, args: &[Expression], span: &Span) -> AnalysisResult<()> {
+    fn check_call(&mut self, callee: &Expression, args: &[Expression], _span: &Span) -> AnalysisResult<()> {
         // 関数の借用チェック
         self.check_expr(callee)?;
         
@@ -401,7 +401,6 @@ impl<'a> BorrowChecker<'a> {
                     self.check_statement(stmt)?;
                 }
             }
-            _ => {} // その他の文は処理不要
         }
         Ok(())
     }
@@ -409,7 +408,7 @@ impl<'a> BorrowChecker<'a> {
     /// パターンに含まれる変数を登録
     fn register_pattern(&mut self, pattern: &Pattern) -> AnalysisResult<()> {
         match pattern {
-            Pattern::Identifier(name, _) => {
+            Pattern::Identifier(_name, _) => {
                 // 新しい変数の登録は別の場所で行われる
                 Ok(())
             }

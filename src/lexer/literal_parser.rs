@@ -143,8 +143,8 @@ mod tests {
 
     #[test]
     fn test_parse_float_with_suffix() {
-        assert_eq!(parse_float_with_suffix("3.14"), Some((3.14, None)));
-        assert_eq!(parse_float_with_suffix("3.14f32"), Some((3.14, Some("f32".to_string()))));
-        assert_eq!(parse_float_with_suffix("2.718f64"), Some((2.718, Some("f64".to_string()))));
+        assert_eq!(parse_float_with_suffix("3.141"), Some((3.141, None)));
+        assert_eq!(parse_float_with_suffix("3.141f32"), Some((3.141, Some("f32".to_string()))));
+        assert_eq!(parse_float_with_suffix("2.7183f64"), Some((2.7183, Some("f64".to_string()))));
     }
 }

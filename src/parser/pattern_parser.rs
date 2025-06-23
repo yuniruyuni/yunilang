@@ -1,7 +1,6 @@
 //! パターンの解析
 
 use crate::ast::*;
-use crate::error::{ParserError, YuniError};
 use crate::lexer::Token;
 
 use super::{ParseResult, Parser};

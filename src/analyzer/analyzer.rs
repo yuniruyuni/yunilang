@@ -1,7 +1,6 @@
 //! セマンティック解析器のメイン実装
 
 use crate::ast::*;
-use crate::error::ErrorCollector;
 use std::collections::HashMap;
 
 use super::borrow_checker::BorrowChecker;
@@ -23,6 +22,12 @@ pub struct SemanticAnalyzer {
     lifetime_context: LifetimeContext,
     /// 収集されたエラー
     errors: Vec<AnalysisError>,
+}
+
+impl Default for SemanticAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SemanticAnalyzer {
@@ -181,8 +186,8 @@ impl SemanticAnalyzer {
         }
 
         // メソッドを型のメソッドテーブルに追加
-        if let Type::UserDefined(name) = &method.receiver.ty {
-            let func_sig = FunctionSignature {
+        if let Type::UserDefined(_name) = &method.receiver.ty {
+            let _func_sig = FunctionSignature {
                 name: method.name.clone(),
                 params: method.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
                 return_type: method.return_type.as_ref().map(|t| (**t).clone()).unwrap_or(Type::Void),
@@ -339,16 +344,16 @@ impl SemanticAnalyzer {
         // 初期化式がある場合は型チェック
         let inferred_type = if let Some(ref init_expr) = let_stmt.init {
             // 型注釈がある場合はそれを期待される型として使用
-            let expr_type = if let Some(ref annotated_type) = let_stmt.ty {
+            
+            
+            if let Some(ref annotated_type) = let_stmt.ty {
                 self.type_checker.validate_type(annotated_type, let_stmt.span)?;
                 let expr_type = self.analyze_expression_with_type(init_expr, Some(annotated_type))?;
                 self.type_checker.check_type_compatibility(annotated_type, &expr_type, let_stmt.span)?;
                 annotated_type.clone()
             } else {
                 self.analyze_expression(init_expr)?
-            };
-            
-            expr_type
+            }
         } else if let Some(ref annotated_type) = let_stmt.ty {
             self.type_checker.validate_type(annotated_type, let_stmt.span)?;
             annotated_type.clone()
@@ -786,7 +791,7 @@ impl SemanticAnalyzer {
         let first_element_type = self.analyze_expression(&array.elements[0])?;
         
         // 残りの要素の型が一致するかチェック
-        for (_i, element) in array.elements.iter().skip(1).enumerate() {
+        for element in array.elements.iter().skip(1) {
             let element_type = self.analyze_expression(element)?;
             if !self.type_checker.types_compatible(&first_element_type, &element_type) {
                 return Err(AnalysisError::TypeMismatch {
@@ -1010,7 +1015,7 @@ impl SemanticAnalyzer {
                 self.scope_stack.last_mut().unwrap().define(symbol)?;
                 Ok(())
             }
-            Pattern::EnumVariant { enum_name, variant, fields } => {
+            Pattern::EnumVariant { enum_name, variant: _, fields: _ } => {
                 // enum型が存在することを確認
                 if let Type::UserDefined(type_name) = expected_type {
                     if type_name != enum_name {

@@ -154,7 +154,7 @@ impl LifetimeContext {
     }
     
     /// 名前付きライフタイムを登録
-    pub fn register_named_lifetime(&mut self, name: String, span: Span) -> AnalysisResult<LifetimeId> {
+    pub fn register_named_lifetime(&mut self, _name: String, span: Span) -> AnalysisResult<LifetimeId> {
         // 簡単のため、名前付きライフタイムも番号で管理
         let id = LifetimeId::Named(self.next_anonymous_id);
         self.next_anonymous_id += 1;
@@ -184,13 +184,13 @@ impl LifetimeContext {
     }
     
     /// 変数の借用を記録
-    pub fn record_borrow(&mut self, var_name: String, kind: BorrowKind, lifetime: LifetimeId, span: Span) {
+    pub fn record_borrow(&mut self, var_name: String, kind: BorrowKind, lifetime: LifetimeId, _span: Span) {
         let borrow_info = BorrowInfo {
             kind,
             lifetime,
         };
         
-        self.variable_borrows.entry(var_name).or_insert_with(Vec::new).push(borrow_info);
+        self.variable_borrows.entry(var_name).or_default().push(borrow_info);
     }
     
     /// 変数の使用を記録
@@ -201,7 +201,7 @@ impl LifetimeContext {
             scope: self.current_scope,
         };
         
-        self.variable_usage.entry(var_name).or_insert_with(Vec::new).push(usage);
+        self.variable_usage.entry(var_name).or_default().push(usage);
     }
     
     /// 借用チェックを実行

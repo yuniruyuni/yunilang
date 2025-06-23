@@ -4,17 +4,16 @@ use crate::ast::*;
 use crate::error::{CodegenError, YuniError, YuniResult};
 use inkwell::builder::Builder;
 use inkwell::context::Context as LLVMContext;
-use inkwell::module::{Linkage, Module};
+use inkwell::module::Module;
 use inkwell::passes::PassManager;
-use inkwell::targets::{CodeModel, FileType, RelocMode, Target, TargetMachine};
-use inkwell::types::{BasicMetadataTypeEnum, BasicTypeEnum};
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
-use inkwell::{AddressSpace, OptimizationLevel};
+use inkwell::targets::{Target, TargetMachine};
+use inkwell::types::BasicTypeEnum;
+use inkwell::values::FunctionValue;
+use inkwell::OptimizationLevel;
 use std::collections::HashMap;
-use std::path::Path;
 
 use super::runtime::RuntimeManager;
-use super::symbol_table::{ScopeManager, StructInfo, Symbol};
+use super::symbol_table::{ScopeManager, StructInfo};
 use super::types::TypeManager;
 
 /// メインコード生成器構造体
@@ -141,7 +140,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 
                 // フィールド情報を保存
                 let mut struct_info = StructInfo::new();
-                for (index, field) in struct_def.fields.iter().enumerate() {
+                for (_index, field) in struct_def.fields.iter().enumerate() {
                     struct_info.add_field(field.name.clone(), field.ty.clone());
                 }
                 self.struct_info.insert(struct_def.name.clone(), struct_info);
@@ -170,7 +169,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map(|param| param.ty.clone())
             .collect();
 
-        let return_type = func.return_type.as_ref().map(|t| &**t).unwrap_or(&Type::Void);
+        let return_type = func.return_type.as_deref().unwrap_or(&Type::Void);
         let fn_type = self.type_manager.create_function_type(&param_types, return_type, false)?;
 
         let function = self.module.add_function(&func.name, fn_type, None);
@@ -208,7 +207,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             param_types.push(self.type_manager.ast_type_to_metadata(&param.ty)?);
         }
 
-        let return_type = method.return_type.as_ref().map(|t| &**t).unwrap_or(&Type::Void);
+        let return_type = method.return_type.as_deref().unwrap_or(&Type::Void);
         let fn_type = self.type_manager.create_function_type(
             &method.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>(),
             return_type,
@@ -224,11 +223,10 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 関数をコンパイル
     fn compile_function(&mut self, func: &FunctionDecl) -> YuniResult<()> {
-        let function = self.functions.get(&func.name)
+        let function = *self.functions.get(&func.name)
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { 
                 message: format!("Function {} not found", func.name) 
-            }))?
-            .clone();
+            }))?;
 
         self.current_function = Some(function);
         self.current_return_type = func.return_type.as_ref().map(|t| (**t).clone());
@@ -304,11 +302,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
 
         let method_name = format!("{}_{}", receiver_type_name, method.name);
-        let function = self.functions.get(&method_name)
+        let function = *self.functions.get(&method_name)
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal { 
                 message: format!("Method {} not found", method_name) 
-            }))?
-            .clone();
+            }))?;
 
         self.current_function = Some(function);
         self.current_return_type = method.return_type.as_ref().map(|t| (**t).clone());

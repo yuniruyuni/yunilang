@@ -1,7 +1,7 @@
 //! メインパーサー構造とユーティリティ
 
 use crate::ast::*;
-use crate::error::{ParserError, YuniError, YuniResult};
+use crate::error::ParserError;
 use crate::lexer::{Token, TokenWithPosition};
 
 use super::{ParseError, ParseResult};

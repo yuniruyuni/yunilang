@@ -60,8 +60,8 @@ impl<'ctx> TypeManager<'ctx> {
             Type::Str => Ok(self.context.ptr_type(AddressSpace::default()).into()),
             Type::String => Ok(self.context.ptr_type(AddressSpace::default()).into()),
             Type::Array(elem_ty) => {
-                let elem_type = self.ast_type_to_llvm(elem_ty)?;
-                Ok(elem_type.ptr_type(AddressSpace::default()).into())
+                let _elem_type = self.ast_type_to_llvm(elem_ty)?;
+                Ok(self.context.ptr_type(AddressSpace::default()).into())
             }
             Type::Tuple(types) => {
                 let field_types: Vec<BasicTypeEnum> = types
@@ -87,8 +87,8 @@ impl<'ctx> TypeManager<'ctx> {
                 }
             }
             Type::Reference(referent, _is_mut) => {
-                let inner_type = self.ast_type_to_llvm(referent)?;
-                Ok(inner_type.ptr_type(AddressSpace::default()).into())
+                let _inner_type = self.ast_type_to_llvm(referent)?;
+                Ok(self.context.ptr_type(AddressSpace::default()).into())
             }
             Type::Function(fn_type) => {
                 // 関数ポインタ型として扱う
@@ -103,12 +103,12 @@ impl<'ctx> TypeManager<'ctx> {
                     Some(self.ast_type_to_llvm(&fn_type.return_type)?)
                 };
                 
-                let llvm_fn_type = match ret_type {
+                let _llvm_fn_type = match ret_type {
                     Some(ret) => ret.fn_type(&param_types, false),
                     None => self.context.void_type().fn_type(&param_types, false),
                 };
                 
-                Ok(llvm_fn_type.ptr_type(AddressSpace::default()).into())
+                Ok(self.context.ptr_type(AddressSpace::default()).into())
             }
             Type::Void => Err(YuniError::Codegen(CodegenError::InvalidType {
                 message: "Void type cannot be used as a value".to_string(),
@@ -214,7 +214,7 @@ impl<'ctx> TypeManager<'ctx> {
                     .iter()
                     .map(|t| self.create_default_value(t))
                     .collect::<YuniResult<Vec<_>>>()?;
-                let field_types: Vec<BasicTypeEnum> = values
+                let _field_types: Vec<BasicTypeEnum> = values
                     .iter()
                     .map(|v| v.get_type())
                     .collect();

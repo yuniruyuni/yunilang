@@ -2,10 +2,9 @@
 
 use crate::ast::*;
 use crate::error::{CodegenError, YuniError, YuniResult};
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue};
-use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
+use inkwell::values::BasicValueEnum;
+use inkwell::{FloatPredicate, IntPredicate};
 use inkwell::types::BasicTypeEnum;
-use std::collections::HashMap;
 
 use super::codegen::CodeGenerator;
 
@@ -398,7 +397,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// println呼び出しのコンパイル
-    fn compile_println_call(&mut self, args: &[Expression], span: Span) -> YuniResult<BasicValueEnum<'ctx>> {
+    fn compile_println_call(&mut self, args: &[Expression], _span: Span) -> YuniResult<BasicValueEnum<'ctx>> {
         if args.is_empty() {
             // 引数なしの場合は改行のみ
             let newline_str = self.context.const_string(b"\n", true);
@@ -520,7 +519,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // 直接構造体値の場合
                 let field_value = self.builder.build_extract_value(
                     struct_val,
-                    field_index as u32,
+                    field_index,
                     &field.field
                 )?;
                 Ok(field_value)

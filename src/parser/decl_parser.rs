@@ -1,7 +1,6 @@
 //! 宣言（関数、構造体、列挙型）の解析
 
 use crate::ast::*;
-use crate::error::{ParserError, YuniError};
 use crate::lexer::Token;
 
 use super::{ParseResult, Parser};
@@ -160,7 +159,6 @@ impl Parser {
 
     /// 構造体定義を解析（`struct Name { ... }` 構文）
     fn parse_struct_def(&mut self) -> ParseResult<StructDef> {
-        let start = self.current_span().start;
         self.expect(Token::Struct)?;
         let name = self.expect_identifier()?;
         
@@ -169,7 +167,6 @@ impl Parser {
 
     /// 列挙型定義を解析（`enum Name { ... }` 構文）
     fn parse_enum_def(&mut self) -> ParseResult<EnumDef> {
-        let start = self.current_span().start;
         self.expect(Token::Enum)?;
         let name = self.expect_identifier()?;
         

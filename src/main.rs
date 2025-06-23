@@ -581,7 +581,7 @@ fn evaluate_repl_input(
                     // TODO: Execute statement
                     Ok(None)
                 }
-                Err(e) => return Err(YuniError::Other(format!("Parse error: {}", e))),
+                Err(e) => Err(YuniError::Other(format!("Parse error: {}", e))),
             }
         }
     }

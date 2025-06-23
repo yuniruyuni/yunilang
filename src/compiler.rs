@@ -4,18 +4,15 @@
 //! 複数のエラーを蓄積しながら処理を進める機能を提供します。
 
 use crate::analyzer::SemanticAnalyzer;
-use crate::ast::Span;
 use crate::codegen::CodeGenerator;
 use crate::error::{
-    DiagnosticError, ErrorCollector, LexerError, YuniError, YuniResult,
+    ErrorCollector, LexerError, YuniError, YuniResult,
 };
 use crate::lexer::{Lexer, Token};
 use crate::parser::Parser;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use inkwell::context::Context;
-use inkwell::OptimizationLevel;
 use std::fs;
 use std::path::Path;
 
@@ -211,7 +208,7 @@ impl<'ctx> CompilationPipeline<'ctx> {
         let tokens = self.tokenize();
         
         // エラーがあってもパースは続行（より多くのエラーを検出するため）
-        let ast = if !self.state.has_errors() || true {
+        let ast = if !self.state.has_errors() {
             self.parse(tokens)
         } else {
             None
