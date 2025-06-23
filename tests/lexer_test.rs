@@ -167,8 +167,29 @@ mod tests {
         if let Token::Integer(value) = &tokens[0] {
             assert_eq!(*value, 42);
         }
-        // サフィックス付き整数は現在サポートされていない
-        // TODO: サフィックス付き整数のサポート
+    }
+
+    #[test]
+    fn test_integer_literals_with_suffix() {
+        // 型サフィックス付き整数リテラルのテスト
+        let source = "42i32 100u64 255u8 -128i8";
+        let tokens = extract_tokens(source);
+        
+        // 42i32 -> Integer(42), I32
+        assert!(matches!(tokens[0], Token::Integer(42)));
+        assert!(matches!(tokens[1], Token::I32));
+        
+        // 100u64 -> Integer(100), U64
+        assert!(matches!(tokens[2], Token::Integer(100)));
+        assert!(matches!(tokens[3], Token::U64));
+        
+        // 255u8 -> Integer(255), U8
+        assert!(matches!(tokens[4], Token::Integer(255)));
+        assert!(matches!(tokens[5], Token::U8));
+        
+        // -128i8 -> Integer(-128), I8
+        assert!(matches!(tokens[6], Token::Integer(-128)));
+        assert!(matches!(tokens[7], Token::I8));
     }
 
     #[test]
@@ -184,10 +205,27 @@ mod tests {
         
         // 具体的な値の確認
         if let Token::Float(value) = &tokens[0] {
-            assert_eq!(*value, 3.140);
+            assert!((value - 3.14).abs() < 0.001);
         }
-        // サフィックス付き浮動小数点数は現在サポートされていない
-        // TODO: サフィックス付き浮動小数点数のサポート
+    }
+
+    #[test]
+    fn test_floating_point_literals_with_suffix() {
+        // 型サフィックス付き浮動小数点リテラルのテスト
+        let source = "3.14f32 2.71828f64 0.5f32";
+        let tokens = extract_tokens(source);
+        
+        // 3.14f32 -> Float(3.14), F32
+        assert!(matches!(tokens[0], Token::Float(f) if (f - 3.14).abs() < 0.001));
+        assert!(matches!(tokens[1], Token::F32));
+        
+        // 2.71828f64 -> Float(2.71828), F64
+        assert!(matches!(tokens[2], Token::Float(f) if (f - 2.71828).abs() < 0.000001));
+        assert!(matches!(tokens[3], Token::F64));
+        
+        // 0.5f32 -> Float(0.5), F32
+        assert!(matches!(tokens[4], Token::Float(f) if (f - 0.5).abs() < 0.001));
+        assert!(matches!(tokens[5], Token::F32));
     }
 
     #[test]
