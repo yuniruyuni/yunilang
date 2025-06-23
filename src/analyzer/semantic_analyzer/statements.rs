@@ -11,7 +11,10 @@ impl SemanticAnalyzer {
         
         for stmt in &block.statements {
             if returns {
-                // TODO: Implement unreachable code detection
+                // 到達不能コードを検出
+                self.errors.push(AnalysisError::UnreachableCode {
+                    span: self.get_statement_span(stmt),
+                });
             }
             
             match self.analyze_statement(stmt) {

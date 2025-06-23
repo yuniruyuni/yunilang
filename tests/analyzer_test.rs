@@ -878,4 +878,122 @@ mod tests {
         
         assert_analysis_success(source);
     }
+
+    #[test]
+    fn test_unreachable_code_after_return() {
+        // return文の後の到達不能コード検出
+        let source = r#"
+        package main
+        
+        fn test(): i32 {
+            return 42;
+            let x = 10;  // 到達不能コード
+            return x;    // 到達不能コード
+        }
+        
+        fn main() {
+        }
+        "#;
+        
+        assert_specific_error(source, |e| {
+            matches!(e, AnalyzerError::UnreachableCode { .. })
+        });
+    }
+
+    #[test]
+    fn test_unreachable_code_after_if_else_return() {
+        // if-elseの両方でreturnする場合の到達不能コード検出
+        let source = r#"
+        package main
+        
+        fn test(x: bool): i32 {
+            if x {
+                return 1;
+            } else {
+                return 2;
+            }
+            let y = 3;  // 到達不能コード
+            return y;   // 到達不能コード
+        }
+        
+        fn main() {
+        }
+        "#;
+        
+        assert_specific_error(source, |e| {
+            matches!(e, AnalyzerError::UnreachableCode { .. })
+        });
+    }
+
+    #[test]
+    fn test_reachable_code_if_without_else() {
+        // else節がない場合は到達可能
+        let source = r#"
+        package main
+        
+        fn test(x: bool): i32 {
+            if x {
+                return 1;
+            }
+            let y = 2;  // 到達可能
+            return y;   // 到達可能
+        }
+        
+        fn main() {
+        }
+        "#;
+        
+        assert_analysis_success(source);
+    }
+
+    #[test]
+    fn test_unreachable_code_nested_if() {
+        // ネストされたif文での到達不能コード検出
+        let source = r#"
+        package main
+        
+        fn test(x: bool, y: bool): i32 {
+            if x {
+                if y {
+                    return 1;
+                } else {
+                    return 2;
+                }
+            } else {
+                return 3;
+            }
+            let z = 4;  // 到達不能コード
+            return z;   // 到達不能コード
+        }
+        
+        fn main() {
+        }
+        "#;
+        
+        assert_specific_error(source, |e| {
+            matches!(e, AnalyzerError::UnreachableCode { .. })
+        });
+    }
+
+    #[test]
+    fn test_unreachable_code_in_block() {
+        // ブロック内の到達不能コード検出
+        let source = r#"
+        package main
+        
+        fn test(): i32 {
+            {
+                return 42;
+                let x = 10;  // 到達不能コード
+            }
+        }
+        
+        fn main() {
+        }
+        "#;
+        
+        assert_specific_error(source, |e| {
+            matches!(e, AnalyzerError::UnreachableCode { .. })
+        });
+    }
 }

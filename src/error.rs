@@ -140,6 +140,9 @@ pub enum AnalyzerError {
     
     #[error("一時的な値の参照を取得することはできません")]
     TemporaryReference { span: Span },
+    
+    #[error("到達不能コード")]
+    UnreachableCode { span: Span },
 }
 
 /// コード生成エラーの詳細
@@ -364,6 +367,11 @@ impl DiagnosticError {
                 "一時的な値の参照を取得することはできません".to_string(),
                 vec![Label::primary(self.file_id, span.start..span.end)
                     .with_message("一時的な値への参照は無効です")],
+            ),
+            AnalyzerError::UnreachableCode { span } => (
+                "到達不能コード".to_string(),
+                vec![Label::primary(self.file_id, span.start..span.end)
+                    .with_message("このコードは実行されません")],
             ),
         }
     }
