@@ -3,7 +3,7 @@
 //! このモジュールはASTからLLVM IRを生成する責任を持ちます。
 
 mod code_generator;
-mod expr_codegen;
+mod expr;
 mod runtime;
 mod stmt_codegen;
 mod symbol_table;

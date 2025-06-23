@@ -3,7 +3,7 @@
 //! このモジュールは型チェック、名前解決、ライフタイム解析、
 //! その他のセマンティック検証を行います。
 
-mod semantic_analyzer;
+pub mod semantic_analyzer;
 mod borrow_checker;
 mod lifetime;
 mod symbol;
