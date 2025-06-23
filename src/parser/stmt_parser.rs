@@ -18,12 +18,13 @@ impl Parser {
             _ => {
                 // 式文または代入文として解析を試みる
                 let expr = self.parse_expression_internal()?;
+                let start = expr.span().start;
 
                 // 代入かどうかチェック
                 if self.match_token(&Token::Assign) {
                     let value = self.parse_expression_internal()?;
-                    let span = Span::dummy(); // TODO: 適切なspan計算
                     self.expect(Token::Semicolon)?;
+                    let span = self.span_from(start);
                     Ok(Statement::Assignment(AssignStatement {
                         target: expr,
                         value,
@@ -152,10 +153,11 @@ impl Parser {
         } else {
             // 式文または代入文
             let expr = self.parse_expression_internal()?;
+            let expr_start = expr.span().start;
             if self.match_token(&Token::Assign) {
                 let value = self.parse_expression_internal()?;
-                let span = Span::dummy(); // TODO: 適切なspan計算
                 self.expect(Token::Semicolon)?;
+                let span = Span::new(expr_start, value.span().end);
                 Some(Statement::Assignment(AssignStatement {
                     target: expr,
                     value,

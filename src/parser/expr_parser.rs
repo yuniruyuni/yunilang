@@ -18,7 +18,7 @@ impl Parser {
         while self.match_token(&Token::OrOr) {
             let op = BinaryOp::Or;
             let right = self.parse_and_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -37,7 +37,7 @@ impl Parser {
         while self.match_token(&Token::AndAnd) {
             let op = BinaryOp::And;
             let right = self.parse_bitwise_or_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -56,7 +56,7 @@ impl Parser {
         while self.match_token(&Token::Or) {
             let op = BinaryOp::BitOr;
             let right = self.parse_bitwise_xor_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -75,7 +75,7 @@ impl Parser {
         while self.match_token(&Token::Caret) {
             let op = BinaryOp::BitXor;
             let right = self.parse_bitwise_and_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -94,7 +94,7 @@ impl Parser {
         while self.match_token(&Token::Ampersand) {
             let op = BinaryOp::BitAnd;
             let right = self.parse_equality_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -143,7 +143,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.parse_shift_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -166,7 +166,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.parse_additive_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -189,7 +189,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.parse_multiplicative_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -213,7 +213,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.parse_cast_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = Span::new(left.span().start, right.span().end);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -228,10 +228,11 @@ impl Parser {
     /// キャスト式を解析
     fn parse_cast_expression(&mut self) -> ParseResult<Expression> {
         let expr = self.parse_unary_expression()?;
+        let start = expr.span().start;
 
         if self.match_token(&Token::As) {
             let ty = self.parse_type()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = self.span_from(start);
             Ok(Expression::Cast(CastExpr {
                 expr: Box::new(expr),
                 ty,
@@ -244,11 +245,13 @@ impl Parser {
 
     /// 単項式を解析
     fn parse_unary_expression(&mut self) -> ParseResult<Expression> {
+        let start = self.current_span().start;
+        
         match self.current_token() {
             Some(Token::Bang) => {
                 self.advance();
                 let expr = self.parse_unary_expression()?;
-                let span = Span::dummy(); // TODO: 適切なspan計算
+                let span = Span::new(start, expr.span().end);
                 Ok(Expression::Unary(UnaryExpr {
                     op: UnaryOp::Not,
                     expr: Box::new(expr),
@@ -258,7 +261,7 @@ impl Parser {
             Some(Token::Minus) => {
                 self.advance();
                 let expr = self.parse_unary_expression()?;
-                let span = Span::dummy(); // TODO: 適切なspan計算
+                let span = Span::new(start, expr.span().end);
                 Ok(Expression::Unary(UnaryExpr {
                     op: UnaryOp::Negate,
                     expr: Box::new(expr),
@@ -268,7 +271,7 @@ impl Parser {
             Some(Token::Tilde) => {
                 self.advance();
                 let expr = self.parse_unary_expression()?;
-                let span = Span::dummy(); // TODO: 適切なspan計算
+                let span = Span::new(start, expr.span().end);
                 Ok(Expression::Unary(UnaryExpr {
                     op: UnaryOp::BitNot,
                     expr: Box::new(expr),
@@ -279,7 +282,7 @@ impl Parser {
                 self.advance();
                 let is_mut = self.match_token(&Token::Mut);
                 let expr = self.parse_unary_expression()?;
-                let span = Span::dummy(); // TODO: 適切なspan計算
+                let span = Span::new(start, expr.span().end);
                 Ok(Expression::Reference(ReferenceExpr {
                     expr: Box::new(expr),
                     is_mut,
@@ -289,7 +292,7 @@ impl Parser {
             Some(Token::Star) => {
                 self.advance();
                 let expr = self.parse_unary_expression()?;
-                let span = Span::dummy(); // TODO: 適切なspan計算
+                let span = Span::new(start, expr.span().end);
                 Ok(Expression::Dereference(DereferenceExpr {
                     expr: Box::new(expr),
                     span,
@@ -304,12 +307,14 @@ impl Parser {
         let mut expr = self.parse_primary_expression()?;
 
         loop {
+            let start = expr.span().start;
+            
             match self.current_token() {
                 Some(Token::LeftBracket) => {
                     self.advance();
                     let index = self.parse_expression_internal()?;
                     self.expect(Token::RightBracket)?;
-                    let span = Span::dummy(); // TODO: 適切なspan計算
+                    let span = self.span_from(start);
                     expr = Expression::Index(IndexExpr {
                         object: Box::new(expr),
                         index: Box::new(index),
@@ -319,13 +324,13 @@ impl Parser {
                 Some(Token::Dot) => {
                     self.advance();
                     let field = self.expect_identifier()?;
-                    let span = Span::dummy(); // TODO: 適切なspan計算
                     
                     // メソッド呼び出しかフィールドアクセスかを判定
                     if self.check(&Token::LeftParen) {
                         self.advance();
                         let args = self.parse_arguments()?;
                         self.expect(Token::RightParen)?;
+                        let span = self.span_from(start);
                         expr = Expression::MethodCall(MethodCallExpr {
                             object: Box::new(expr),
                             method: field,
@@ -333,6 +338,7 @@ impl Parser {
                             span,
                         });
                     } else {
+                        let span = self.span_from(start);
                         expr = Expression::Field(FieldExpr {
                             object: Box::new(expr),
                             field,
@@ -344,7 +350,7 @@ impl Parser {
                     self.advance();
                     let args = self.parse_arguments()?;
                     self.expect(Token::RightParen)?;
-                    let span = Span::dummy(); // TODO: 適切なspan計算
+                    let span = self.span_from(start);
                     expr = Expression::Call(CallExpr {
                         callee: Box::new(expr),
                         args,
@@ -464,12 +470,13 @@ impl Parser {
                 Ok(Expression::Identifier(Identifier { name, span: span.into() }))
             }
             Some(Token::LeftParen) => {
+                let start = self.current_span().start;
                 self.advance();
                 
                 // 空のタプル
                 if self.check(&Token::RightParen) {
                     self.advance();
-                    let span = Span::dummy(); // TODO: 適切なspan計算
+                    let span = self.span_from(start);
                     return Ok(Expression::Tuple(TupleExpr { elements: vec![], span }));
                 }
                 
@@ -487,7 +494,7 @@ impl Parser {
                     }
                     
                     self.expect(Token::RightParen)?;
-                    let span = Span::dummy(); // TODO: 適切なspan計算
+                    let span = self.span_from(start);
                     Ok(Expression::Tuple(TupleExpr { elements, span }))
                 } else {
                     // 括弧付き式
@@ -496,6 +503,7 @@ impl Parser {
                 }
             }
             Some(Token::LeftBracket) => {
+                let start = self.current_span().start;
                 self.advance();
                 let mut elements = Vec::new();
                 
@@ -507,7 +515,7 @@ impl Parser {
                 }
                 
                 self.expect(Token::RightBracket)?;
-                let span = Span::dummy(); // TODO: 適切なspan計算
+                let span = self.span_from(start);
                 Ok(Expression::Array(ArrayExpr { elements, span }))
             }
             Some(Token::Match) => {
@@ -534,6 +542,7 @@ impl Parser {
 
     /// 構造体リテラルを解析
     fn parse_struct_literal(&mut self, name: String) -> ParseResult<Expression> {
+        let start = self.current_span().start - name.len();
         self.expect(Token::LeftBrace)?;
         let mut fields = Vec::new();
         
@@ -558,7 +567,7 @@ impl Parser {
         }
         
         self.expect(Token::RightBrace)?;
-        let span = Span::dummy(); // TODO: 適切なspan計算
+        let span = self.span_from(start);
         
         Ok(Expression::StructLit(StructLiteral {
             name,
