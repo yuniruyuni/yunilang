@@ -18,8 +18,33 @@ impl SemanticAnalyzer {
         self.enter_scope();
 
         // ライフタイムパラメータを設定
-        if let Some(_lives_clause) = &func.lives_clause {
-            // TODO: ライフタイムパラメータの処理
+        if let Some(lives_clause) = &func.lives_clause {
+            // ライフタイムパラメータをコンテキストに登録
+            for constraint in &lives_clause.constraints {
+                // ターゲットライフタイムを登録
+                let target_lifetime = self.lifetime_context.register_named_lifetime(
+                    constraint.target.clone(),
+                    constraint.span,
+                )?;
+                
+                // ソースライフタイムを登録し、制約を追加
+                for source in &constraint.sources {
+                    let source_lifetime = self.lifetime_context.register_named_lifetime(
+                        source.clone(),
+                        constraint.span,
+                    )?;
+                    
+                    // 'source: 'target の制約を追加（sourceはtargetより長く生きる）
+                    self.lifetime_context.add_outlives_constraint(source_lifetime, target_lifetime);
+                    self.lifetime_context.add_constraint(
+                        crate::analyzer::lifetime::LivesConstraint::Outlives {
+                            longer: source_lifetime,
+                            shorter: target_lifetime,
+                            span: constraint.span,
+                        }
+                    );
+                }
+            }
         }
 
         // パラメータをスコープに追加
@@ -74,8 +99,33 @@ impl SemanticAnalyzer {
         self.enter_scope();
 
         // ライフタイムパラメータを設定
-        if let Some(_lives_clause) = &method.lives_clause {
-            // TODO: ライフタイムパラメータの処理
+        if let Some(lives_clause) = &method.lives_clause {
+            // ライフタイムパラメータをコンテキストに登録
+            for constraint in &lives_clause.constraints {
+                // ターゲットライフタイムを登録
+                let target_lifetime = self.lifetime_context.register_named_lifetime(
+                    constraint.target.clone(),
+                    constraint.span,
+                )?;
+                
+                // ソースライフタイムを登録し、制約を追加
+                for source in &constraint.sources {
+                    let source_lifetime = self.lifetime_context.register_named_lifetime(
+                        source.clone(),
+                        constraint.span,
+                    )?;
+                    
+                    // 'source: 'target の制約を追加（sourceはtargetより長く生きる）
+                    self.lifetime_context.add_outlives_constraint(source_lifetime, target_lifetime);
+                    self.lifetime_context.add_constraint(
+                        crate::analyzer::lifetime::LivesConstraint::Outlives {
+                            longer: source_lifetime,
+                            shorter: target_lifetime,
+                            span: constraint.span,
+                        }
+                    );
+                }
+            }
         }
 
         // self パラメータをスコープに追加
