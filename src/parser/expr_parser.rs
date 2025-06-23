@@ -109,6 +109,7 @@ impl Parser {
 
     /// 等価式を解析
     fn parse_equality_expression(&mut self) -> ParseResult<Expression> {
+        let start_pos = self.current_span().start;
         let mut left = self.parse_relational_expression()?;
 
         while let Some(op) = self.match_tokens(&[Token::EqEq, Token::NotEq]) {
@@ -118,7 +119,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.parse_relational_expression()?;
-            let span = Span::dummy(); // TODO: 適切なspan計算
+            let span = self.span_from(start_pos);
             left = Expression::Binary(BinaryExpr {
                 left: Box::new(left),
                 op,
@@ -449,9 +450,10 @@ impl Parser {
                 let span = self.current_span();
                 self.advance();
                 
+                
                 // パス（Enum::Variant など）を解析
                 if self.check(&Token::ColonColon) {
-                    return self.parse_path_expression(name);
+                    return self.parse_path_expression(name, span.into());
                 }
                 
                 // 構造体リテラルの場合
@@ -567,7 +569,8 @@ impl Parser {
     }
 
     /// パス式を解析（Enum::Variant のような構文）
-    fn parse_path_expression(&mut self, first_segment: String) -> ParseResult<Expression> {
+    fn parse_path_expression(&mut self, first_segment: String, start_span: Span) -> ParseResult<Expression> {
+        let start = start_span.start;
         let mut segments = vec![first_segment];
         
         while self.match_token(&Token::ColonColon) {
@@ -575,7 +578,7 @@ impl Parser {
             segments.push(segment);
         }
         
-        let span = Span::dummy(); // TODO: 適切なspan計算
+        let span = self.span_from(start);
         
         // 2つのセグメントかつ構造体/タプル/ユニット構文がある場合、Enum Variantとして扱う
         if segments.len() == 2 {
@@ -584,13 +587,18 @@ impl Parser {
             
             // 構造体ライクフィールド: Enum::Variant { field: value }
             if self.check(&Token::LeftBrace) {
-                self.advance();
-                let mut fields = Vec::new();
+                // 先読みして、これが本当に構造体スタイルのEnum variantかを確認
+                // { identifier : ... } の形式かをチェック
+                let is_struct_variant = self.peek_struct_variant_pattern();
                 
-                while !self.check(&Token::RightBrace) && !self.is_at_end() {
-                    let field_name = self.expect_identifier()?;
-                    self.expect(Token::Colon)?;
-                    let value = self.parse_expression_internal()?;
+                if is_struct_variant {
+                    self.advance();
+                    let mut fields = Vec::new();
+                    
+                    while !self.check(&Token::RightBrace) && !self.is_at_end() {
+                        let field_name = self.expect_identifier()?;
+                        self.expect(Token::Colon)?;
+                        let value = self.parse_expression_internal()?;
                     
                     fields.push(StructFieldInit {
                         name: field_name,
@@ -600,16 +608,17 @@ impl Parser {
                     if !self.check(&Token::RightBrace) {
                         self.expect(Token::Comma)?;
                     }
+                    }
+                    
+                    self.expect(Token::RightBrace)?;
+                    
+                    return Ok(Expression::EnumVariant(EnumVariantExpr {
+                        enum_name,
+                        variant: variant_name,
+                        fields: crate::ast::EnumVariantFields::Struct(fields),
+                        span,
+                    }));
                 }
-                
-                self.expect(Token::RightBrace)?;
-                
-                return Ok(Expression::EnumVariant(EnumVariantExpr {
-                    enum_name,
-                    variant: variant_name,
-                    fields: crate::ast::EnumVariantFields::Struct(fields),
-                    span,
-                }));
             }
             // タプルライクフィールド: Enum::Variant(args)
             else if self.check(&Token::LeftParen) {
@@ -690,6 +699,23 @@ impl Parser {
             else_branch,
             span,
         }))
+    }
+
+    /// 構造体スタイルのEnum variantパターンかを先読みで確認
+    fn peek_struct_variant_pattern(&self) -> bool {
+        // { identifier : ... } のパターンかをチェック
+        // 現在のトークンは { なので、次を見る
+        if let Some(Token::Identifier(_)) = self.peek(1) {
+            // identifier の次が : であれば構造体スタイル
+            if let Some(Token::Colon) = self.peek(2) {
+                return true;
+            }
+        }
+        // { } の空の構造体リテラルもサポート
+        if let Some(Token::RightBrace) = self.peek(1) {
+            return true;
+        }
+        false
     }
 
     /// match式を解析

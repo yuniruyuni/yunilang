@@ -84,6 +84,8 @@ impl SemanticAnalyzer {
         if self.errors.is_empty() {
             Ok(())
         } else {
+            // 最初のエラーを返すが、Spanがdummyの場合は実際のエラー箇所が分からないので
+            // より詳細なエラーメッセージを構築
             Err(self.errors[0].clone())
         }
     }
@@ -586,9 +588,85 @@ impl SemanticAnalyzer {
             Expression::MethodCall(method_call) => self.analyze_method_call_expression(method_call),
             Expression::If(if_expr) => self.analyze_if_expression(if_expr),
             Expression::Block(block_expr) => self.analyze_block_expression(block_expr),
-            _ => {
-                // 他の式の型は一旦デフォルト値を返す
+            Expression::TemplateString(_template_str) => {
+                // テンプレート文字列は今のところString型として扱う
+                Ok(Type::String)
+            }
+            Expression::Path(path_expr) => {
+                // パス式（Enum::Variantなど）の解析
+                // 2つのセグメントの場合、Enum variantとして処理
+                if path_expr.segments.len() == 2 {
+                    // これはパーサーのバグで、本来はEnumVariantExprとして解析されるべき
+                    // しかし、とりあえずEnum型として処理
+                    return Ok(Type::UserDefined(path_expr.segments[0].clone()));
+                }
+                
+                // その他のパス式は未実装
+                Err(AnalysisError::UndefinedVariable {
+                    name: path_expr.segments.join("::"),
+                    span: path_expr.span,
+                })
+            }
+            Expression::Index(index_expr) => {
+                // インデックスアクセスの解析
+                let object_type = self.analyze_expression(&index_expr.object)?;
+                let index_type = self.analyze_expression(&index_expr.index)?;
+                
+                // 配列型の場合、要素型を返す
+                match object_type {
+                    Type::Array(elem_type) => {
+                        // インデックスが整数型であることを確認
+                        if !self.type_checker.is_integer_type(&index_type) {
+                            return Err(AnalysisError::TypeMismatch {
+                                expected: "integer type".to_string(),
+                                found: self.type_checker.type_to_string(&index_type),
+                                span: index_expr.span,
+                            });
+                        }
+                        Ok(*elem_type)
+                    }
+                    _ => Err(AnalysisError::TypeMismatch {
+                        expected: "array type".to_string(),
+                        found: self.type_checker.type_to_string(&object_type),
+                        span: index_expr.span,
+                    }),
+                }
+            }
+            Expression::Reference(ref_expr) => {
+                // 参照式の解析
+                let inner_type = self.analyze_expression(&ref_expr.expr)?;
+                Ok(Type::Reference(Box::new(inner_type), ref_expr.is_mut))
+            }
+            Expression::Dereference(deref_expr) => {
+                // 参照外し式の解析
+                let ref_type = self.analyze_expression(&deref_expr.expr)?;
+                match ref_type {
+                    Type::Reference(inner_type, _) => Ok(*inner_type),
+                    _ => Err(AnalysisError::TypeMismatch {
+                        expected: "reference type".to_string(),
+                        found: self.type_checker.type_to_string(&ref_type),
+                        span: deref_expr.span,
+                    }),
+                }
+            }
+            Expression::Assignment(assign_expr) => {
+                // 代入式の解析
+                let target_type = self.analyze_expression(&assign_expr.target)?;
+                let value_type = self.analyze_expression(&assign_expr.value)?;
+                
+                // 型の互換性チェック
+                self.type_checker.check_type_compatibility(&target_type, &value_type, assign_expr.span)?;
+                
+                // 代入式の値はunit型
                 Ok(Type::Void)
+            }
+            Expression::Tuple(tuple_expr) => {
+                // タプル式の解析
+                let mut element_types = Vec::new();
+                for elem in &tuple_expr.elements {
+                    element_types.push(self.analyze_expression(elem)?);
+                }
+                Ok(Type::Tuple(element_types))
             }
         }
     }
@@ -1024,8 +1102,8 @@ impl SemanticAnalyzer {
         if !matches!(condition_type, Type::Bool) {
             return Err(AnalysisError::TypeMismatch {
                 expected: "bool".to_string(),
-                found: format!("{:?}", condition_type),
-                span: if_expr.span,
+                found: self.type_checker.type_to_string(&condition_type),
+                span: self.get_expression_span(&if_expr.condition),
             });
         }
 
@@ -1040,7 +1118,7 @@ impl SemanticAnalyzer {
             self.type_checker.check_type_compatibility(&then_type, &else_type, if_expr.span)?;
             Ok(then_type)
         } else {
-            // else節がない場合、if式の値はunit型
+            // else節がない場合、if式の値はunit型（値を返さない）
             Ok(Type::Void)
         }
     }

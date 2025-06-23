@@ -511,7 +511,8 @@ mod tests {
         assert_valid_ir(&ir);
         
         // 複雑なプログラムの主要コンポーネントが含まれていることを確認
-        assert!(ir.contains("Calculator"), "Should contain struct definitions");
+        // LLVM IRでは構造体名は保持されないので、構造体の型（double）をチェック
+        assert!(ir.contains("{ double }"), "Should contain struct type definition");
         assert!(ir.matches("define").count() >= 3, "Should contain multiple function definitions");
         assert!(ir.contains("call"), "Should contain function calls");
         assert!(ir.contains("printf"), "Should contain println implementation");

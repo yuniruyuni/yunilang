@@ -229,10 +229,6 @@ impl Parser {
         while !self.check(&Token::RightBrace) && !self.is_at_end() {
             // 式の可能性があるかチェック
             if self.is_expression_start() {
-                // デバッグ: 現在のトークンを出力
-                if let Some(token) = self.current_token() {
-                    eprintln!("DEBUG: parse_block_expression - current token: {:?}", token);
-                }
                 let expr = self.parse_expression_internal()?;
                 
                 // セミコロンがあるか、次がブロック終了でないかチェック

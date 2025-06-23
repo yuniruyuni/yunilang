@@ -270,6 +270,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         if function.verify(true) {
             self.pass_manager.run_on(&function);
         } else {
+            // 検証失敗時にLLVM IRを出力してデバッグ
+            eprintln!("Function verification failed: {}", func.name);
+            function.print_to_stderr();
             return Err(YuniError::Codegen(CodegenError::Internal {
                 message: format!("Function verification failed: {}", func.name),
             }));

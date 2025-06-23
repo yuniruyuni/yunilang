@@ -213,6 +213,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                 name: name.clone(),
                 span: path.span,
             });
+        } else if path.segments.len() == 2 {
+            // Enum::Variant のパターンを処理
+            // これはEnumVariantExprとして処理されるべきだが、
+            // 現在は単純にその形式でコンパイル
+            let enum_variant = EnumVariantExpr {
+                enum_name: path.segments[0].clone(),
+                variant: path.segments[1].clone(),
+                fields: crate::ast::EnumVariantFields::Unit,
+                span: path.span,
+            };
+            return self.compile_enum_variant(&enum_variant);
         }
         
         Err(YuniError::Codegen(CodegenError::Unimplemented {
@@ -621,7 +632,16 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
 
         // 構造体値を作成
-        Ok(struct_type.const_named_struct(&field_values).into())
+        // 動的な値を含む構造体の場合は、build_insert_valueを使用して構築
+        let struct_val = struct_type.get_undef();
+        let mut result = struct_val;
+        
+        for (i, field_value) in field_values.iter().enumerate() {
+            result = self.builder.build_insert_value(result, *field_value, i as u32, &format!("field_{}", i))?
+                .into_struct_value();
+        }
+        
+        Ok(result.into())
     }
 
     /// 列挙型バリアントをコンパイル
