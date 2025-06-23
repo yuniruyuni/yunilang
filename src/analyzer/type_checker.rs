@@ -249,6 +249,10 @@ impl TypeChecker {
                     })
                 }
             }
+            Type::Reference(inner, _) => {
+                // 参照型の場合、内部の型でフィールドアクセス
+                self.get_field_type(inner, field_name, span)
+            }
             _ => Err(AnalysisError::InvalidOperation {
                 message: "Field access on non-struct type".to_string(),
                 span,
@@ -418,5 +422,35 @@ impl TypeChecker {
     /// 型情報を取得
     pub fn get_type_info(&self, name: &str) -> Option<&TypeInfo> {
         self.types.get(name)
+    }
+    
+    /// メソッドを型に登録
+    pub fn register_method(&mut self, type_name: &str, method_sig: FunctionSignature) -> AnalysisResult<()> {
+        // 型が存在するか確認
+        if let Some(type_info) = self.types.get_mut(type_name) {
+            // メソッド名の重複をチェック
+            if type_info.methods.contains_key(&method_sig.name) {
+                return Err(AnalysisError::DuplicateFunction {
+                    name: format!("{}::{}", type_name, method_sig.name),
+                    span: method_sig.span,
+                });
+            }
+            
+            // メソッドを登録
+            type_info.methods.insert(method_sig.name.clone(), method_sig);
+            Ok(())
+        } else {
+            Err(AnalysisError::UndefinedType {
+                name: type_name.to_string(),
+                span: method_sig.span,
+            })
+        }
+    }
+    
+    /// メソッドシグネチャを取得
+    #[allow(dead_code)]
+    pub fn get_method_signature(&self, type_name: &str, method_name: &str) -> Option<&FunctionSignature> {
+        self.types.get(type_name)
+            .and_then(|type_info| type_info.methods.get(method_name))
     }
 }

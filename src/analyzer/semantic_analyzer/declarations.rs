@@ -103,18 +103,39 @@ impl SemanticAnalyzer {
         self.type_checker.validate_type(&return_type, method.span)?;
 
         // メソッドを対応する型に登録
-        let _receiver_name = match &method.receiver.ty {
+        let receiver_name = match &method.receiver.ty {
             Type::UserDefined(name) => name.clone(),
+            Type::Reference(inner, _) => {
+                // 参照型の場合、内部の型を確認
+                match inner.as_ref() {
+                    Type::UserDefined(name) => name.clone(),
+                    _ => return Err(AnalysisError::TypeMismatch {
+                        expected: "user-defined type or reference to user-defined type".to_string(),
+                        found: format!("{:?}", method.receiver.ty),
+                        span: method.span,
+                    }),
+                }
+            }
             _ => return Err(AnalysisError::TypeMismatch {
-                expected: "user-defined type".to_string(),
+                expected: "user-defined type or reference to user-defined type".to_string(),
                 found: format!("{:?}", method.receiver.ty),
                 span: method.span,
             }),
         };
 
-        // TODO: メソッドシグネチャの登録
-        // 現在の実装では、TypeCheckerに直接メソッドを登録する方法がないため、
-        // 一時的にスキップする
+        // メソッドシグネチャを作成
+        let signature = FunctionSignature {
+            name: method.name.clone(),
+            params: method.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
+            return_type,
+            lives_clause: method.lives_clause.clone(),
+            is_method: true,
+            receiver_type: Some(method.receiver.ty.clone()),
+            span: method.span,
+        };
+
+        // TypeCheckerにメソッドを登録
+        self.type_checker.register_method(&receiver_name, signature)?;
         Ok(())
     }
 }
