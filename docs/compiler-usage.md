@@ -106,39 +106,6 @@ cargo run -- check program.yuni --dump-ast
 | `--dump-ast` | | ASTをJSON形式で出力 | false |
 | `--dump-tokens` | | トークンリストを出力 | false |
 
-### repl - インタラクティブモード
-
-対話的にYuniコードを実行できるREPL（Read-Eval-Print Loop）を開始します。
-
-```bash
-# REPLを開始
-cargo run -- repl
-
-# 詳細モードでREPL開始
-cargo run -- repl --verbose
-```
-
-#### replオプション
-
-| オプション | 短縮形 | 説明 | デフォルト |
-|-----------|--------|------|------------|
-| `--verbose` | `-v` | 詳細な情報を表示 | false |
-
-#### REPL使用方法
-
-```bash
-$ cargo run -- repl
-Yuni REPL v0.1.0
-Type 'exit' to quit, 'help' for help
-
-yuni> let x = 42;
-yuni> println("Hello, ", x);
-Hello, 42
-yuni> fn add(a: i32, b: i32): i32 { return a + b; }
-yuni> add(10, 20)
-30
-yuni> exit
-```
 
 ## コンパイル例
 

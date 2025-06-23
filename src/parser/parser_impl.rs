@@ -54,15 +54,6 @@ impl Parser {
         })
     }
 
-    /// 単一の式を解析（REPL用）
-    pub fn parse_expression(&mut self) -> ParseResult<Expression> {
-        self.parse_expression_internal()
-    }
-
-    /// 単一の文を解析（REPL用）
-    pub fn parse_statement(&mut self) -> ParseResult<Statement> {
-        self.parse_statement_internal()
-    }
 
     // ==================== ユーティリティメソッド ====================
 

@@ -49,8 +49,6 @@ cargo run -- run examples/hello.yuni
 # Check syntax only
 cargo run -- check examples/hello.yuni
 
-# Interactive REPL
-cargo run -- repl
 
 # Compile with optimization
 cargo run -- compile examples/hello.yuni -O3
@@ -73,7 +71,7 @@ The compiler follows a traditional multi-stage pipeline:
 
 ### Key Components
 
-- **Main CLI** (`src/main.rs`): Command-line interface with compile/run/repl/check subcommands
+- **Main CLI** (`src/main.rs`): Command-line interface with compile/run/check subcommands
 - **Lexer** (`src/lexer/`): Tokenization using the `logos` crate
 - **Parser** (`src/parser/`): Recursive descent parser using `nom` combinators, produces AST
 - **AST** (`src/ast/`): Abstract syntax tree definitions with serde support for dumping
@@ -114,7 +112,6 @@ Test pattern: Lex → Parse → Analyze → CodeGen for various language feature
 ## Important Notes
 
 - The runtime is implemented in C (`src/runtime.c`) and linked with generated code
-- REPL is partially implemented (syntax checking only, no execution yet)
 - Error reporting uses codespan for beautiful diagnostics with source code context
 - The compiler supports multiple output formats: executable, LLVM IR, object files, assembly
 - Optimization levels 0-3 are supported and passed through to LLVM

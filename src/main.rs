@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use std::fs;
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
@@ -17,8 +16,6 @@ mod runtime;
 
 use crate::compiler::{CompilationPipeline, CompilationState};
 use crate::error::{YuniError, YuniResult};
-use crate::lexer::{Lexer, Token};
-use crate::parser::Parser as YuniParser;
 
 #[derive(Parser)]
 #[command(name = "yunilang")]
@@ -93,8 +90,6 @@ enum Commands {
         opt_level: u8,
     },
 
-    /// Start an interactive REPL
-    Repl,
 
     /// Check a Yuni source file for errors without compiling
     Check {
@@ -138,7 +133,6 @@ fn main() -> YuniResult<()> {
             args,
             opt_level,
         } => run(input, args, opt_level),
-        Commands::Repl => repl(),
         Commands::Check { input } => check(input),
     };
 
@@ -508,102 +502,6 @@ fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> YuniResult<()> {
     Ok(())
 }
 
-fn repl() -> YuniResult<()> {
-    println!("{}", "Yuni Language REPL".blue().bold());
-    println!("Type ':quit' or ':q' to exit, ':help' for help\n");
-
-    let context = inkwell::context::Context::create();
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    let mut line_number = 1;
-
-    loop {
-        // Print prompt
-        print!("yuni:{:03}> ", line_number);
-        stdout.flush()?;
-
-        // Read input
-        let mut input = String::new();
-        stdin.read_line(&mut input)?;
-        let input = input.trim();
-
-        // Handle REPL commands
-        match input {
-            ":quit" | ":q" => {
-                println!("Goodbye!");
-                break;
-            }
-            ":help" | ":h" => {
-                println!("REPL commands:");
-                println!("  :quit, :q    Exit the REPL");
-                println!("  :help, :h    Show this help message");
-                println!("  :clear, :c   Clear the screen");
-                println!("\nEnter Yuni expressions or statements to evaluate them.");
-                continue;
-            }
-            ":clear" | ":c" => {
-                print!("\x1B[2J\x1B[1;1H"); // ANSI escape codes to clear screen
-                continue;
-            }
-            "" => continue,
-            _ => {}
-        }
-
-        // Try to evaluate the input
-        match evaluate_repl_input(input, &context, line_number) {
-            Ok(Some(result)) => {
-                println!("{}: {}", "result".green(), result);
-            }
-            Ok(None) => {
-                // Statement executed successfully, no result to print
-            }
-            Err(e) => {
-                eprintln!("{}: {}", "error".red(), e);
-            }
-        }
-
-        line_number += 1;
-    }
-
-    Ok(())
-}
-
-fn evaluate_repl_input(
-    input: &str,
-    _context: &inkwell::context::Context,
-    _line_number: usize,
-) -> YuniResult<Option<String>> {
-    // For now, just parse and check syntax
-    let lexer = Lexer::new(input);
-    let tokens: Vec<_> = lexer.collect_tokens();
-
-    // Check for lexer errors
-    for token in &tokens {
-        if matches!(token.token, Token::Error) {
-            return Err(YuniError::Other("Lexical error: unrecognized token".to_string()));
-        }
-    }
-
-    // Try to parse as an expression first
-    let mut parser = YuniParser::new(tokens.clone());
-    match parser.parse_expression() {
-        Ok(expr) => {
-            // TODO: Evaluate expression and return result
-            Ok(Some(format!("{:?}", expr)))
-        }
-        Err(_) => {
-            // Try to parse as a statement
-            let mut parser = YuniParser::new(tokens);
-            match parser.parse_statement() {
-                Ok(_stmt) => {
-                    // TODO: Execute statement
-                    Ok(None)
-                }
-                Err(e) => Err(YuniError::Other(format!("Parse error: {}", e))),
-            }
-        }
-    }
-}
 
 fn check(input: PathBuf) -> YuniResult<()> {
     log::info!("Checking {:?}", input);

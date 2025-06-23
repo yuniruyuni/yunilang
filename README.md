@@ -151,10 +151,6 @@ cargo run -- run input.yuni
 cargo run -- check input.yuni
 ```
 
-### インタラクティブREPLの開始
-```bash
-cargo run -- repl
-```
 
 ### 追加オプション
 - `--verbose` または `-v`: 詳細出力を有効にする
