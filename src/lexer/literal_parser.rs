@@ -88,8 +88,7 @@ pub fn parse_integer_with_suffix(s: &str) -> Option<(i128, Option<String>)> {
     ];
     
     for suffix in &suffixes {
-        if s.ends_with(suffix) {
-            let num_part = &s[..s.len() - suffix.len()];
+        if let Some(num_part) = s.strip_suffix(suffix) {
             if let Ok(num) = num_part.parse::<i128>() {
                 return Some((num, Some(suffix.to_string())));
             }
@@ -106,8 +105,7 @@ pub fn parse_float_with_suffix(s: &str) -> Option<(f64, Option<String>)> {
     let suffixes = ["f8", "f16", "f32", "f64"];
     
     for suffix in &suffixes {
-        if s.ends_with(suffix) {
-            let num_part = &s[..s.len() - suffix.len()];
+        if let Some(num_part) = s.strip_suffix(suffix) {
             if let Ok(num) = num_part.parse::<f64>() {
                 return Some((num, Some(suffix.to_string())));
             }
@@ -143,8 +141,8 @@ mod tests {
 
     #[test]
     fn test_parse_float_with_suffix() {
-        assert_eq!(parse_float_with_suffix("3.141"), Some((3.141, None)));
-        assert_eq!(parse_float_with_suffix("3.141f32"), Some((3.141, Some("f32".to_string()))));
-        assert_eq!(parse_float_with_suffix("2.7183f64"), Some((2.7183, Some("f64".to_string()))));
+        assert_eq!(parse_float_with_suffix("3.1415"), Some((3.1415, None)));
+        assert_eq!(parse_float_with_suffix("3.1415f32"), Some((3.1415, Some("f32".to_string()))));
+        assert_eq!(parse_float_with_suffix("2.7184f64"), Some((2.7184, Some("f64".to_string()))));
     }
 }

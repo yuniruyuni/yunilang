@@ -184,7 +184,7 @@ mod tests {
         
         // 具体的な値の確認
         if let Token::Float(value) = &tokens[0] {
-            assert_eq!(*value, 3.14);
+            assert_eq!(*value, 3.140);
         }
         // サフィックス付き浮動小数点数は現在サポートされていない
         // TODO: サフィックス付き浮動小数点数のサポート

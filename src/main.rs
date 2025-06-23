@@ -1,7 +1,4 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use codespan_reporting::diagnostic::{Diagnostic, Label};
-use codespan_reporting::files::SimpleFiles;
-use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use colored::Colorize;
 use std::fs;
 use std::io::{self, Write};
@@ -19,7 +16,7 @@ mod parser;
 mod runtime;
 
 use crate::compiler::{CompilationPipeline, CompilationState};
-use crate::error::{DiagnosticError, ErrorCollector, YuniError, YuniResult};
+use crate::error::{YuniError, YuniResult};
 use crate::lexer::{Lexer, Token};
 use crate::parser::Parser as YuniParser;
 
@@ -126,7 +123,16 @@ fn main() -> YuniResult<()> {
             dump_ast,
             dump_tokens,
             keep_temps,
-        } => compile(input, output, emit, opt_level, dump_ast, dump_tokens, keep_temps, cli.verbose),
+        } => compile(CompileOptions {
+            input,
+            output,
+            emit,
+            opt_level,
+            dump_ast,
+            dump_tokens,
+            keep_temps,
+            verbose: cli.verbose,
+        }),
         Commands::Run {
             input,
             args,
@@ -145,7 +151,7 @@ fn main() -> YuniResult<()> {
 }
 
 
-fn compile(
+struct CompileOptions {
     input: PathBuf,
     output: Option<PathBuf>,
     emit: EmitType,
@@ -154,7 +160,19 @@ fn compile(
     dump_tokens: bool,
     keep_temps: bool,
     verbose: bool,
-) -> YuniResult<()> {
+}
+
+fn compile(opts: CompileOptions) -> YuniResult<()> {
+    let CompileOptions {
+        input,
+        output,
+        emit,
+        opt_level,
+        dump_ast,
+        dump_tokens,
+        keep_temps,
+        verbose,
+    } = opts;
     if verbose {
         println!("{}: Compiling {:?} with optimization level O{}", 
                 "info".blue().bold(), input, opt_level);
@@ -458,16 +476,16 @@ fn run(input: PathBuf, args: Vec<String>, opt_level: u8) -> YuniResult<()> {
     let temp_exe = temp_dir.join(format!("yuni_run_{}", std::process::id()));
 
     // Compile to executable
-    compile(
+    compile(CompileOptions {
         input,
-        Some(temp_exe.clone()),
-        EmitType::Executable,
+        output: Some(temp_exe.clone()),
+        emit: EmitType::Executable,
         opt_level,
-        false,
-        false,
-        false, // don't keep temps for run
-        false, // not verbose
-    )?;
+        dump_ast: false,
+        dump_tokens: false,
+        keep_temps: false, // don't keep temps for run
+        verbose: false, // not verbose
+    })?;
 
     // Run the executable
     log::debug!("Executing {:?}", temp_exe);

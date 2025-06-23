@@ -5,13 +5,14 @@
 
 #[cfg(test)]
 mod tests {
-    use yunilang::analyzer::{SemanticAnalyzer, AnalysisError};
+    use yunilang::analyzer::SemanticAnalyzer;
+    use yunilang::error::{YuniError, AnalyzerError};
     use yunilang::lexer::Lexer;
     use yunilang::parser::Parser;
     use yunilang::ast::*;
 
     /// ソースコードを解析してASTを取得し、セマンティック解析を実行するヘルパー関数
-    fn analyze_source(source: &str) -> Result<Program, AnalysisError> {
+    fn analyze_source(source: &str) -> Result<Program, YuniError> {
         let lexer = Lexer::new(source);
         let tokens: Vec<_> = lexer.collect_tokens();
         let mut parser = Parser::new(tokens);
@@ -34,11 +35,13 @@ mod tests {
 
     /// 特定のエラータイプが発生することを確認するヘルパー関数
     fn assert_specific_error<F>(source: &str, check: F) 
-    where F: Fn(&AnalysisError) -> bool {
+    where F: Fn(&AnalyzerError) -> bool {
         let result = analyze_source(source);
         assert!(result.is_err(), "Analysis should fail");
-        if let Err(error) = result {
+        if let Err(YuniError::Analyzer(error)) = result {
             assert!(check(&error), "Expected specific error type, got: {:?}", error);
+        } else if let Err(e) = result {
+            panic!("Expected AnalyzerError, got: {:?}", e);
         }
     }
 
@@ -327,7 +330,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::UndefinedVariable { .. })
+            matches!(e, AnalyzerError::UndefinedVariable { .. })
         });
     }
 
@@ -343,7 +346,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::UndefinedFunction { .. })
+            matches!(e, AnalyzerError::UndefinedFunction { .. })
         });
     }
 
@@ -359,7 +362,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::UndefinedType { .. })
+            matches!(e, AnalyzerError::UndefinedType { .. })
         });
     }
 
@@ -375,7 +378,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::TypeMismatch { .. })
+            matches!(e, AnalyzerError::TypeMismatch { .. })
         });
     }
 
@@ -392,7 +395,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::ImmutableVariable { .. })
+            matches!(e, AnalyzerError::ImmutableVariable { .. })
         });
     }
 
@@ -409,7 +412,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::DuplicateVariable { .. })
+            matches!(e, AnalyzerError::DuplicateVariable { .. })
         });
     }
 
@@ -430,7 +433,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::DuplicateFunction { .. })
+            matches!(e, AnalyzerError::DuplicateFunction { .. })
         });
     }
 
@@ -450,7 +453,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::ArgumentCountMismatch { .. })
+            matches!(e, AnalyzerError::ArgumentCountMismatch { .. })
         });
     }
 
@@ -469,7 +472,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::TypeMismatch { .. })
+            matches!(e, AnalyzerError::TypeMismatch { .. })
         });
     }
 
@@ -489,7 +492,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::MissingReturn { .. })
+            matches!(e, AnalyzerError::MissingReturn { .. })
         });
     }
 
@@ -507,7 +510,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::TypeMismatch { .. })
+            matches!(e, AnalyzerError::TypeMismatch { .. })
         });
     }
 
@@ -525,7 +528,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::TypeMismatch { .. })
+            matches!(e, AnalyzerError::TypeMismatch { .. })
         });
     }
 
@@ -542,7 +545,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::TypeMismatch { .. })
+            matches!(e, AnalyzerError::TypeMismatch { .. })
         });
     }
 
@@ -584,7 +587,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::MethodNotFound { .. })
+            matches!(e, AnalyzerError::MethodNotFound { .. })
         });
     }
 
@@ -653,7 +656,7 @@ mod tests {
         "#;
         
         assert_specific_error(source, |e| {
-            matches!(e, AnalysisError::DuplicateFunction { .. })
+            matches!(e, AnalyzerError::DuplicateFunction { .. })
         });
     }
 

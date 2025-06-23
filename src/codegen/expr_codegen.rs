@@ -6,7 +6,7 @@ use inkwell::values::BasicValueEnum;
 use inkwell::{FloatPredicate, IntPredicate};
 use inkwell::types::BasicTypeEnum;
 
-use super::codegen::CodeGenerator;
+use super::code_generator::CodeGenerator;
 
 impl<'ctx> CodeGenerator<'ctx> {
     /// 式をコンパイル（期待される型のコンテキストなし）
@@ -442,8 +442,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }))?;
 
             let mut printf_args = vec![format_arg.into()];
-            for i in 1..args.len() {
-                let arg_value = self.compile_expression(&args[i])?;
+            for arg in args.iter().skip(1) {
+                let arg_value = self.compile_expression(arg)?;
                 printf_args.push(arg_value.into());
             }
 
@@ -481,10 +481,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         
         // 構造体名を取得
         let struct_name = match &object_type {
-            Type::UserDefined(name) => name,
+            Type::UserDefined(name) => name.clone(),
             Type::Reference(inner, _) => {
                 if let Type::UserDefined(name) = inner.as_ref() {
-                    name
+                    name.clone()
                 } else {
                     return Err(YuniError::Codegen(CodegenError::InvalidType {
                         message: "Field access on non-struct type".to_string(),
@@ -501,7 +501,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         
         // 構造体情報を取得
-        let struct_info = self.struct_info.get(struct_name)
+        let struct_info = self.struct_info.get(&struct_name)
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: format!("Struct info not found for {}", struct_name),
             }))?;
@@ -526,7 +526,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             BasicValueEnum::PointerValue(ptr_val) => {
                 // ポインタの場合はGEPを使用
-                let struct_type = self.type_manager.get_struct(struct_name)
+                let struct_type = self.type_manager.get_struct(&struct_name)
                     .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                         message: format!("Struct type not found for {}", struct_name),
                     }))?;
@@ -697,18 +697,21 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let source_bits = int_val.get_type().get_bit_width();
                 let target_bits = target_int_type.get_bit_width();
                 
-                if source_bits == target_bits {
-                    Ok(int_val.into())
-                } else if source_bits < target_bits {
-                    // 拡張
-                    if self.is_signed_type(source_bits) {
-                        Ok(self.builder.build_int_s_extend(int_val, target_int_type, "sext")?.into())
-                    } else {
-                        Ok(self.builder.build_int_z_extend(int_val, target_int_type, "zext")?.into())
+                use std::cmp::Ordering;
+                match source_bits.cmp(&target_bits) {
+                    Ordering::Equal => Ok(int_val.into()),
+                    Ordering::Less => {
+                        // 拡張
+                        if self.is_signed_type(source_bits) {
+                            Ok(self.builder.build_int_s_extend(int_val, target_int_type, "sext")?.into())
+                        } else {
+                            Ok(self.builder.build_int_z_extend(int_val, target_int_type, "zext")?.into())
+                        }
                     }
-                } else {
-                    // 切り詰め
-                    Ok(self.builder.build_int_truncate(int_val, target_int_type, "trunc")?.into())
+                    Ordering::Greater => {
+                        // 切り詰め
+                        Ok(self.builder.build_int_truncate(int_val, target_int_type, "trunc")?.into())
+                    }
                 }
             }
             
@@ -1155,10 +1158,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let object_type = self.expression_type(&field_expr.object)?;
                 
                 let struct_name = match &object_type {
-                    Type::UserDefined(name) => name,
+                    Type::UserDefined(name) => name.clone(),
                     Type::Reference(inner, _) => {
                         if let Type::UserDefined(name) = inner.as_ref() {
-                            name
+                            name.clone()
                         } else {
                             return Err(YuniError::Codegen(CodegenError::InvalidType {
                                 message: "Field access on non-struct type".to_string(),
@@ -1174,7 +1177,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 };
                 
-                let struct_info = self.struct_info.get(struct_name)
+                let struct_info = self.struct_info.get(&struct_name)
                     .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                         message: format!("Struct info not found for {}", struct_name),
                     }))?;

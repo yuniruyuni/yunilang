@@ -101,7 +101,7 @@ fn test_error_type_conversion() {
 
     // エラーメッセージが適切に生成されることを確認
     let error_message = lexer_error.to_string();
-    assert!(error_message.find("字句解析エラー").is_some());
+    assert!(error_message.contains("字句解析エラー"));
 
     let parser_error = YuniError::Parser(ParserError::UnexpectedToken {
         expected: "identifier".to_string(),
@@ -110,5 +110,5 @@ fn test_error_type_conversion() {
     });
 
     let error_message = parser_error.to_string();
-    assert!(error_message.find("構文解析エラー").is_some());
+    assert!(error_message.contains("構文解析エラー"));
 }

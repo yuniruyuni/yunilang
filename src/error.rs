@@ -37,6 +37,7 @@ pub enum YuniError {
 
 /// レキサーエラーの詳細
 #[derive(Error, Debug, Clone)]
+#[allow(dead_code)]
 pub enum LexerError {
     #[error("認識できないトークン: '{token}'")]
     UnrecognizedToken { token: String, span: Span },
@@ -53,6 +54,7 @@ pub enum LexerError {
 
 /// パーサーエラーの詳細
 #[derive(Error, Debug, Clone)]
+#[allow(dead_code)]
 pub enum ParserError {
     #[error("予期しないトークン: {expected}を期待しましたが、{found}が見つかりました")]
     UnexpectedToken {
@@ -73,6 +75,7 @@ pub enum ParserError {
 
 /// セマンティック解析エラーの詳細
 #[derive(Error, Debug, Clone)]
+#[allow(dead_code)]
 pub enum AnalyzerError {
     #[error("未定義の変数: {name}")]
     UndefinedVariable { name: String, span: Span },
@@ -141,6 +144,7 @@ pub enum AnalyzerError {
 
 /// コード生成エラーの詳細
 #[derive(Error, Debug, Clone)]
+#[allow(dead_code)]
 pub enum CodegenError {
     #[error("LLVM初期化エラー: {message}")]
     LLVMInit { message: String },
@@ -383,6 +387,7 @@ impl ErrorCollector {
     }
 
     /// 警告を追加（将来の拡張用）
+    #[allow(dead_code)]
     pub fn add_warning(&mut self, error: YuniError, file_id: usize) {
         self.warnings.push(DiagnosticError::new(error, file_id));
     }
@@ -393,6 +398,7 @@ impl ErrorCollector {
     }
 
     /// 警告があるかどうか
+    #[allow(dead_code)]
     pub fn has_warnings(&self) -> bool {
         !self.warnings.is_empty()
     }
@@ -403,6 +409,7 @@ impl ErrorCollector {
     }
 
     /// 警告の数
+    #[allow(dead_code)]
     pub fn warning_count(&self) -> usize {
         self.warnings.len()
     }
@@ -418,12 +425,14 @@ impl ErrorCollector {
     }
 
     /// エラーと警告をクリア
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.errors.clear();
         self.warnings.clear();
     }
 
     /// 最初のエラーを取得
+    #[allow(dead_code)]
     pub fn first_error(&self) -> Option<&DiagnosticError> {
         self.errors.first()
     }

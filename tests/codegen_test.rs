@@ -9,9 +9,9 @@ mod tests {
     use yunilang::codegen::CodeGenerator;
     use yunilang::lexer::Lexer;
     use yunilang::parser::Parser;
-    use yunilang::ast::*;
+    
     use inkwell::context::Context;
-    use inkwell::OptimizationLevel;
+    
     use std::fs;
     use std::process::Command;
 
@@ -435,15 +435,13 @@ mod tests {
         
         // 最適化レベルによってIRが変わることを確認
         // （実際の最適化は実装依存）
-        assert!(ir_o0.len() > 0, "Should generate non-empty IR");
+        assert!(!ir_o0.is_empty(), "Should generate non-empty IR");
     }
 
     #[test]
     fn test_error_handling_codegen() {
         // エラーハンドリングのテスト
-        let invalid_sources = vec![
-            // セマンティックエラー（型チェック段階で捕捉される）
-            r#"
+        let invalid_sources = [r#"
             package main
             fn main() {
                 let x: i32 = "hello";
@@ -456,8 +454,7 @@ mod tests {
             fn main() {
                 unknown_function();
             }
-            "#,
-        ];
+            "#];
         
         for (i, source) in invalid_sources.iter().enumerate() {
             assert_compile_error(source, &format!("error_test_{}", i));
@@ -621,14 +618,14 @@ mod tests {
         // LLCでオブジェクトファイルを生成
         let obj_file = "/tmp/test_executable.o";
         let llc_output = Command::new("llc")
-            .args(&["-filetype=obj", ir_file, "-o", obj_file])
+            .args(["-filetype=obj", ir_file, "-o", obj_file])
             .output();
         
         if llc_output.is_ok() {
             // リンカーで実行可能ファイルを生成
             let exe_file = "/tmp/test_executable";
             let link_output = Command::new("clang")
-                .args(&[obj_file, "-o", exe_file])
+                .args([obj_file, "-o", exe_file])
                 .output();
             
             if link_output.is_ok() {

@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::error::{CodegenError, YuniError, YuniResult};
 use inkwell::values::BasicValueEnum;
 
-use super::codegen::CodeGenerator;
+use super::code_generator::CodeGenerator;
 use super::symbol_table::Symbol;
 
 impl<'ctx> CodeGenerator<'ctx> {
@@ -194,7 +194,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         } else {
             // merge_blockが不要な場合は削除
             unsafe {
-                merge_block.delete();
+                let _ = merge_block.delete();
             }
         }
 
@@ -358,10 +358,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         
         // 構造体名を取得
         let struct_name = match &object_type {
-            Type::UserDefined(name) => name,
+            Type::UserDefined(name) => name.clone(),
             Type::Reference(inner, _) => {
                 if let Type::UserDefined(name) = inner.as_ref() {
-                    name
+                    name.clone()
                 } else {
                     return Err(YuniError::Codegen(CodegenError::InvalidType {
                         message: "Field assignment on non-struct type".to_string(),
@@ -378,7 +378,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         
         // 構造体情報を取得
-        let struct_info = self.struct_info.get(struct_name)
+        let struct_info = self.struct_info.get(&struct_name)
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: format!("Struct info not found for {}", struct_name),
             }))?;
@@ -394,7 +394,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         match object_value {
             BasicValueEnum::PointerValue(ptr_val) => {
                 // GEPを使ってフィールドのポインタを取得
-                let struct_type = self.type_manager.get_struct(struct_name)
+                let struct_type = self.type_manager.get_struct(&struct_name)
                     .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                         message: format!("Struct type not found for {}", struct_name),
                     }))?;

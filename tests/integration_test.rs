@@ -4,14 +4,6 @@
 //! 完全なコンパイル・実行、エラー報告、CLIインターフェースを検証する。
 
 #[cfg(test)]
-use std::process::Command;
-#[cfg(test)]
-use std::fs;
-#[cfg(test)]
-use std::path::Path;
-#[cfg(test)]
-use std::env;
-#[cfg(test)]
 use yunilang::analyzer::SemanticAnalyzer;
 #[cfg(test)]
 use yunilang::codegen::CodeGenerator;
@@ -21,8 +13,6 @@ use yunilang::lexer::Lexer;
 use yunilang::parser::Parser;
 #[cfg(test)]
 use inkwell::context::Context;
-#[cfg(test)]
-use tempfile::NamedTempFile;
 
 /// 完全なコンパイルパイプラインのテスト
 #[cfg(test)]
@@ -60,16 +50,16 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::env;
-    use yunilang::analyzer::SemanticAnalyzer;
-    use yunilang::codegen::CodeGenerator;
-    use yunilang::lexer::Lexer;
-    use yunilang::parser::Parser;
-    use inkwell::context::Context;
+    
+    
+    
+    
+    
     use tempfile::NamedTempFile;
 
     /// テスト用のYuniファイルを作成し、そのパスを返すヘルパー関数
     fn create_test_file(content: &str, filename: &str) -> Result<NamedTempFile, std::io::Error> {
-        let mut temp_file = NamedTempFile::new()?;
+        let temp_file = NamedTempFile::new()?;
         fs::write(temp_file.path(), content)?;
         Ok(temp_file)
     }
@@ -78,7 +68,7 @@ mod tests {
     fn get_compiler_path() -> String {
         // カーゴビルドの出力ディレクトリからコンパイラを探す
         let mut cmd = Command::new("cargo");
-        cmd.args(&["build", "--bin", "yunilang"]);
+        cmd.args(["build", "--bin", "yunilang"]);
         let _ = cmd.output(); // ビルドを実行
         
         // バイナリパスを構築
@@ -625,9 +615,7 @@ mod tests {
     #[test]
     fn test_compilation_pipeline_robustness() {
         // コンパイレーションパイプラインの堅牢性テスト
-        let test_cases = vec![
-            // 正常ケース
-            r#"package main
+        let test_cases = [r#"package main
             fn main() { println("Normal case"); }"#,
             
             // 空白の多いケース
@@ -652,8 +640,7 @@ mod tests {
                 println("Comment test"); // End of line comment
             }
             /* End of program */
-            "#,
-        ];
+            "#];
         
         for (i, source) in test_cases.iter().enumerate() {
             let result = test_full_compilation(source, true);

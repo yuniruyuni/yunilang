@@ -13,7 +13,7 @@ mod memory_safety_tests {
     fn test_yuni_alloc_and_free() {
         // メモリ割り当てと解放のテスト
         let size = 1024_usize;
-        let ptr = unsafe { yuni_alloc(size) };
+        let ptr = yuni_alloc(size);
         
         // 割り当てが成功したことを確認
         assert!(!ptr.is_null(), "メモリ割り当てが失敗しました");
@@ -28,7 +28,7 @@ mod memory_safety_tests {
     #[test]
     fn test_zero_size_allocation() {
         // サイズ0の割り当てテスト
-        let ptr = unsafe { yuni_alloc(0) };
+        let ptr = yuni_alloc(0);
         
         // サイズ0でも有効なポインタが返されることを確認
         // （実装によっては null が返される場合もある）
@@ -84,7 +84,7 @@ mod memory_safety_tests {
         let test_values = [0, 42, -123, i64::MAX, i64::MIN];
         
         for &value in &test_values {
-            let ptr = unsafe { yuni_i64_to_string(value) };
+            let ptr = yuni_i64_to_string(value);
             assert!(!ptr.is_null(), "整数から文字列への変換は成功する必要があります");
             
             unsafe {
@@ -102,10 +102,10 @@ mod memory_safety_tests {
     #[test]
     fn test_float_to_str_memory_management() {
         // 浮動小数点数から文字列への変換のメモリ管理テスト
-        let test_values = [0.0, 3.14159, -2.71828, f64::MAX, f64::MIN];
+        let test_values = [0.0, 3.1416, -2.7184, f64::MAX, f64::MIN];
         
         for &value in &test_values {
-            let ptr = unsafe { yuni_f64_to_string(value) };
+            let ptr = yuni_f64_to_string(value);
             assert!(!ptr.is_null(), "浮動小数点数から文字列への変換は成功する必要があります");
             
             unsafe {

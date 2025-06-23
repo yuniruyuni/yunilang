@@ -5,7 +5,6 @@ use yunilang::{
     codegen::CodeGenerator,
     lexer::{Lexer, TokenWithPosition},
     parser::Parser,
-    ast::Program,
 };
 use inkwell::context::Context;
 

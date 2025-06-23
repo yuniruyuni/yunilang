@@ -140,7 +140,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 
                 // フィールド情報を保存
                 let mut struct_info = StructInfo::new();
-                for (_index, field) in struct_def.fields.iter().enumerate() {
+                for field in struct_def.fields.iter() {
                     struct_info.add_field(field.name.clone(), field.ty.clone());
                 }
                 self.struct_info.insert(struct_def.name.clone(), struct_info);
