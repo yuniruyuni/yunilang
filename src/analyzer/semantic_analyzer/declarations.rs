@@ -103,7 +103,7 @@ impl SemanticAnalyzer {
         self.type_checker.validate_type(&return_type, method.span)?;
 
         // メソッドを対応する型に登録
-        let receiver_name = match &method.receiver.ty {
+        let _receiver_name = match &method.receiver.ty {
             Type::UserDefined(name) => name.clone(),
             _ => return Err(AnalysisError::TypeMismatch {
                 expected: "user-defined type".to_string(),

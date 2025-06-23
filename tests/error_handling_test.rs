@@ -17,7 +17,7 @@ fn main() {
     let mut pipeline = CompilationPipeline::new(state, &context, false);
 
     // レキシカル解析を実行
-    let tokens = pipeline.tokenize();
+    let _tokens = pipeline.tokenize();
     
     // エラーが収集されていることを確認
     assert!(pipeline.state().has_errors());

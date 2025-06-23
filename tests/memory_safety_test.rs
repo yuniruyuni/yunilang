@@ -102,6 +102,7 @@ mod memory_safety_tests {
     #[test]
     fn test_float_to_str_memory_management() {
         // 浮動小数点数から文字列への変換のメモリ管理テスト
+        #[allow(clippy::approx_constant)]
         let test_values = [0.0, 3.1416, -2.7184, f64::MAX, f64::MIN];
         
         for &value in &test_values {

@@ -18,7 +18,7 @@ impl SemanticAnalyzer {
         self.enter_scope();
 
         // ライフタイムパラメータを設定
-        if let Some(lives_clause) = &func.lives_clause {
+        if let Some(_lives_clause) = &func.lives_clause {
             // TODO: ライフタイムパラメータの処理
         }
 
@@ -74,7 +74,7 @@ impl SemanticAnalyzer {
         self.enter_scope();
 
         // ライフタイムパラメータを設定
-        if let Some(lives_clause) = &method.lives_clause {
+        if let Some(_lives_clause) = &method.lives_clause {
             // TODO: ライフタイムパラメータの処理
         }
 

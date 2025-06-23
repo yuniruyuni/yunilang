@@ -13,8 +13,8 @@ pub struct TypeChecker {
     functions: HashMap<String, FunctionSignature>,
 }
 
-impl TypeChecker {
-    pub fn new() -> Self {
+impl Default for TypeChecker {
+    fn default() -> Self {
         let mut checker = Self {
             types: HashMap::new(),
             functions: HashMap::new(),
@@ -27,6 +27,12 @@ impl TypeChecker {
         checker.register_builtin_functions();
         
         checker
+    }
+}
+
+impl TypeChecker {
+    pub fn new() -> Self {
+        Self::default()
     }
     
     /// ビルトイン型を登録

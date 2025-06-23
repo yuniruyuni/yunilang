@@ -75,7 +75,7 @@ pub enum BorrowKind {
 }
 
 /// 変数のスコープ管理
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Scope {
     symbols: HashMap<String, Symbol>,
     types: HashMap<String, TypeInfo>,
@@ -84,11 +84,7 @@ pub struct Scope {
 
 impl Scope {
     pub fn new() -> Self {
-        Self {
-            symbols: HashMap::new(),
-            types: HashMap::new(),
-            parent: None,
-        }
+        Self::default()
     }
 
     #[allow(dead_code)]

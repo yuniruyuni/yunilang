@@ -69,11 +69,9 @@ mod tests {
         if let Item::Function(ref func) = ast.items[0] {
             assert_eq!(func.body.statements.len(), 1);
             
-            if let Statement::Expression(ref expr) = func.body.statements[0] {
-                if let Expression::Call(ref call) = expr {
-                    // call.calleeがprintlnを指すことを確認
-                    assert_eq!(call.args.len(), 1);
-                }
+            if let Statement::Expression(Expression::Call(ref call)) = &func.body.statements[0] {
+                // call.calleeがprintlnを指すことを確認
+                assert_eq!(call.args.len(), 1);
             }
         }
     }

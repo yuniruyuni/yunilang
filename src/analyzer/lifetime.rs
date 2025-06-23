@@ -92,8 +92,8 @@ pub struct LifetimeContext {
 }
 
 #[allow(dead_code)]
-impl LifetimeContext {
-    pub fn new() -> Self {
+impl Default for LifetimeContext {
+    fn default() -> Self {
         let mut ctx = Self {
             lifetimes: HashMap::new(),
             constraints: Vec::new(),
@@ -109,6 +109,13 @@ impl LifetimeContext {
         ctx.register_static_lifetime();
         
         ctx
+    }
+}
+
+#[allow(dead_code)]
+impl LifetimeContext {
+    pub fn new() -> Self {
+        Self::default()
     }
     
     /// 静的ライフタイムを登録

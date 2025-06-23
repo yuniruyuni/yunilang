@@ -142,6 +142,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_parse_float_with_suffix() {
         assert_eq!(parse_float_with_suffix("3.1415"), Some((3.1415, None)));
         assert_eq!(parse_float_with_suffix("3.1415f32"), Some((3.1415, Some("f32".to_string()))));

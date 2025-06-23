@@ -58,7 +58,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     /// テスト用のYuniファイルを作成し、そのパスを返すヘルパー関数
-    fn create_test_file(content: &str, filename: &str) -> Result<NamedTempFile, std::io::Error> {
+    fn create_test_file(content: &str, _filename: &str) -> Result<NamedTempFile, std::io::Error> {
         let temp_file = NamedTempFile::new()?;
         fs::write(temp_file.path(), content)?;
         Ok(temp_file)
@@ -499,7 +499,7 @@ mod tests {
         
         // この例は高度なメモリ管理機能を使用しているため、
         // 実装の範囲に応じて調整が必要
-        let result = test_full_compilation(source, false); // 実装に応じてtrueに変更
+        let _result = test_full_compilation(source, false); // 実装に応じてtrueに変更
         
         // 現在の実装では複雑な所有権システムはサポートされていない可能性が高い
         // 基本的な構造体操作のみテスト
