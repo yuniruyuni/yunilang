@@ -351,24 +351,45 @@ mod tests {
             return Calculator { value: 0.0, history: 0 };
         }
         
-        fn update_calculator(calc: Calculator, new_value: f64): Calculator {
+        fn add_to_calculator(value: f64, add_value: f64, history: i32): Calculator {
             return Calculator { 
-                value: new_value, 
-                history: calc.history + 1 
+                value: value + add_value, 
+                history: history + 1 
+            };
+        }
+        
+        fn multiply_calculator(value: f64, mul_value: f64, history: i32): Calculator {
+            return Calculator { 
+                value: value * mul_value, 
+                history: history + 1 
+            };
+        }
+        
+        fn subtract_from_calculator(value: f64, sub_value: f64, history: i32): Calculator {
+            return Calculator { 
+                value: value - sub_value, 
+                history: history + 1 
+            };
+        }
+        
+        fn divide_calculator(value: f64, div_value: f64, history: i32): Calculator {
+            return Calculator { 
+                value: value / div_value, 
+                history: history + 1 
             };
         }
         
         fn run_calculations() {
-            let mut calc = create_calculator();
+            let calc1 = create_calculator();
             
             // 単純な計算を行う（enumを使わない）
-            calc = update_calculator(calc, calc.value + 10.0);
-            calc = update_calculator(calc, calc.value * 2.0);
-            calc = update_calculator(calc, calc.value - 5.0);
-            calc = update_calculator(calc, calc.value / 3.0);
+            let calc2 = add_to_calculator(calc1.value, 10.0, calc1.history);
+            let calc3 = multiply_calculator(calc2.value, 2.0, calc2.history);
+            let calc4 = subtract_from_calculator(calc3.value, 5.0, calc3.history);
+            let calc5 = divide_calculator(calc4.value, 3.0, calc4.history);
             
-            println("Final result:", calc.value);
-            println("Operations performed:", calc.history);
+            println("Final result:", calc5.value);
+            println("Operations performed:", calc5.history);
         }
         
         fn main() {

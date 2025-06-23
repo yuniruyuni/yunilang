@@ -218,13 +218,22 @@ impl<'a> BorrowChecker<'a> {
         // 関数の借用チェック
         self.check_expr(callee)?;
         
+        // 呼び出される関数名を取得
+        let is_println = match callee {
+            Expression::Identifier(id) => id.name == "println",
+            _ => false,
+        };
+        
         // 各引数の借用チェック
         for arg in args {
             self.check_expr(arg)?;
             
-            // 引数が移動を伴うかチェック
-            if self.is_move_expr(arg) {
-                self.handle_move(arg)?;
+            // printlnの場合は引数を移動させない（参照として扱う）
+            if !is_println {
+                // 引数が移動を伴うかチェック
+                if self.is_move_expr(arg) {
+                    self.handle_move(arg)?;
+                }
             }
         }
         
