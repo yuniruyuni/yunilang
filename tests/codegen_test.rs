@@ -647,6 +647,41 @@ mod tests {
     }
 
     #[test]
+    fn test_assignment_expressions() {
+        let source = r#"
+        package test
+
+        fn main() {
+            // 基本的な代入式（文として）
+            let mut x = 0;
+            x = 42;
+            
+            // 複数の代入
+            let mut a = 0;
+            let mut b = 0;
+            let mut c = 0;
+            a = 100;
+            b = 100;
+            c = 100;
+            
+            // 構造体フィールドへの代入（構造体が定義されている場合）
+            // struct Point { x: i32, y: i32 }
+            // let mut point = Point { x: 0, y: 0 };
+            // point.x = 10;
+        }
+        "#;
+        
+        let ir = compile_to_ir(source, "test_assignments").unwrap();
+        assert_valid_ir(&ir);
+        
+        // 代入が実行されることを確認
+        assert!(ir.contains("store"), "IR should contain store instructions for assignments");
+        // 変数への複数の代入を確認
+        let store_count = ir.matches("store").count();
+        assert!(store_count >= 6, "IR should contain at least 6 store instructions for initial values and assignments");
+    }
+
+    #[test]
     fn test_tuple_expressions() {
         let source = r#"
         package test

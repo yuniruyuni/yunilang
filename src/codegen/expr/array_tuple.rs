@@ -180,10 +180,132 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 代入式をコンパイル
     pub fn compile_assignment_expr(&mut self, assign: &AssignmentExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
+        // 値を評価
+        let value = self.compile_expression(&assign.value)?;
+        
+        // ターゲットに応じて代入処理
+        match &assign.target.as_ref() {
+            Expression::Identifier(id) => {
+                let symbol = self.scope_manager.lookup(&id.name)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                        name: id.name.clone(),
+                        span: id.span,
+                    }))?;
+                    
+                if !symbol.is_mutable {
+                    return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: format!("変数 {} は不変です", id.name),
+                        span: assign.span,
+                    }));
+                }
+                
+                self.builder.build_store(symbol.ptr, value)?;
+            }
+            Expression::Field(field_expr) => {
+                // フィールドアクセスへの代入
+                self.compile_field_assignment_expr(field_expr, value)?;
+            }
+            Expression::Index(index_expr) => {
+                // インデックスアクセスへの代入
+                self.compile_index_assignment_expr(index_expr, value)?;
+            }
+            Expression::Dereference(deref_expr) => {
+                // 参照外しへの代入
+                self.compile_deref_assignment_expr(deref_expr, value)?;
+            }
+            _ => {
+                return Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "無効な代入先です".to_string(),
+                    span: assign.span,
+                }));
+            }
+        }
+        
+        // 代入式は代入された値を返す（Rustと同様）
+        Ok(value)
+    }
+    
+    /// フィールドへの代入式をコンパイル（ヘルパー）
+    fn compile_field_assignment_expr(&mut self, field_expr: &FieldExpr, value: BasicValueEnum<'ctx>) -> YuniResult<()> {
+        // オブジェクトのアドレスを取得
+        let object_ptr = match field_expr.object.as_ref() {
+            Expression::Identifier(id) => {
+                let symbol = self.scope_manager.lookup(&id.name)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                        name: id.name.clone(),
+                        span: id.span,
+                    }))?;
+                symbol.ptr
+            }
+            _ => {
+                return Err(YuniError::Codegen(CodegenError::Unimplemented {
+                    feature: "ネストしたフィールドアクセスへの代入はまだ実装されていません".to_string(),
+                    span: field_expr.span,
+                }));
+            }
+        };
+        
+        // 構造体情報を取得
+        let struct_name = match field_expr.object.as_ref() {
+            Expression::Identifier(id) => {
+                let symbol = self.scope_manager.lookup(&id.name).unwrap();
+                match &symbol.ty {
+                    Type::UserDefined(name) => name.clone(),
+                    _ => return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "構造体型ではありません".to_string(),
+                        span: field_expr.span,
+                    })),
+                }
+            }
+            _ => unreachable!(),
+        };
+        
+        let struct_info = self.struct_info.get(&struct_name)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: struct_name.clone(),
+                span: field_expr.span,
+            }))?;
+        
+        let field_index = struct_info.field_indices.get(&field_expr.field)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: format!("{}.{}", struct_name, field_expr.field),
+                span: field_expr.span,
+            }))?;
+        
+        // フィールドポインタを取得
+        let struct_ty = Type::UserDefined(struct_name.clone());
+        let llvm_struct_type = self.type_manager.ast_type_to_llvm(&struct_ty)?;
+        let struct_type = match llvm_struct_type {
+            BasicTypeEnum::StructType(st) => st,
+            _ => return Err(YuniError::Codegen(CodegenError::Internal {
+                message: format!("構造体型 {} が見つかりません", struct_name),
+            })),
+        };
+        
+        let field_ptr = self.builder.build_struct_gep(
+            struct_type,
+            object_ptr,
+            *field_index,
+            &format!("{}_field_{}", struct_name, field_expr.field)
+        )?;
+        
+        self.builder.build_store(field_ptr, value)?;
+        Ok(())
+    }
+    
+    /// インデックスへの代入式をコンパイル（ヘルパー）
+    fn compile_index_assignment_expr(&mut self, _index_expr: &IndexExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
         Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Assignment expressions not yet implemented".to_string(),
-            span: assign.span,
+            feature: "インデックスアクセスへの代入はまだ実装されていません".to_string(),
+            span: Span::dummy(),
+        }))
+    }
+    
+    /// 参照外しへの代入式をコンパイル（ヘルパー）
+    fn compile_deref_assignment_expr(&mut self, _deref_expr: &DereferenceExpr, _value: BasicValueEnum<'ctx>) -> YuniResult<()> {
+        Err(YuniError::Codegen(CodegenError::Unimplemented {
+            feature: "参照外しへの代入はまだ実装されていません".to_string(),
+            span: Span::dummy(),
         }))
     }
 }
