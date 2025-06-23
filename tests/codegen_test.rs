@@ -647,6 +647,32 @@ mod tests {
     }
 
     #[test]
+    fn test_array_expressions() {
+        let source = r#"
+        package test
+
+        fn main() {
+            // 整数配列
+            let int_array = [1, 2, 3, 4, 5];
+            
+            // 浮動小数点配列
+            let float_array = [1.0, 2.5, 3.14];
+            
+            // 文字列配列
+            let string_array = ["hello", "world"];
+        }
+        "#;
+        
+        let ir = compile_to_ir(source, "test_arrays").unwrap();
+        assert_valid_ir(&ir);
+        
+        // 配列用のメモリ割り当てが行われていることを確認
+        assert!(ir.contains("yuni_alloc"), "IR should contain memory allocation for arrays");
+        assert!(ir.contains("store"), "IR should contain store instructions for array elements");
+        assert!(ir.contains("getelementptr"), "IR should contain GEP instructions for array indexing");
+    }
+
+    #[test]
     fn test_integer_literal_type_inference() {
         // 整数リテラルの型推論テスト
         let source = r#"

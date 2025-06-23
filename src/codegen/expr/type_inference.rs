@@ -348,6 +348,25 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Enumバリアントの型はEnum自体の型
                 Ok(Type::UserDefined(enum_variant.enum_name.clone()))
             }
+            Expression::Array(array_expr) => {
+                if array_expr.elements.is_empty() {
+                    Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "空の配列の型を推論できません".to_string(),
+                        span: array_expr.span,
+                    }))
+                } else {
+                    // 最初の要素の型を配列の要素型とする
+                    let element_type = self.expression_type(&array_expr.elements[0])?;
+                    Ok(Type::Array(Box::new(element_type)))
+                }
+            }
+            Expression::Tuple(tuple_expr) => {
+                let element_types: Vec<Type> = tuple_expr.elements
+                    .iter()
+                    .map(|elem| self.expression_type(elem))
+                    .collect::<YuniResult<Vec<_>>>()?;
+                Ok(Type::Tuple(element_types))
+            }
             _ => Err(YuniError::Codegen(CodegenError::Unimplemented {
                 feature: "Type inference not implemented for this expression".to_string(),
                 span: expr.span(),

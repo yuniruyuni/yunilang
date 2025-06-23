@@ -3,18 +3,74 @@
 use crate::ast::*;
 use crate::error::{CodegenError, YuniError, YuniResult};
 use inkwell::values::BasicValueEnum;
-use inkwell::types::BasicTypeEnum;
+use inkwell::types::{BasicType, BasicTypeEnum};
+use inkwell::AddressSpace;
 
 use crate::codegen::code_generator::CodeGenerator;
 
 impl<'ctx> CodeGenerator<'ctx> {
     /// 配列式をコンパイル
     pub fn compile_array_expr(&mut self, array: &ArrayExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: 実装
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Array expressions not yet implemented".to_string(),
-            span: array.span,
-        }))
+        if array.elements.is_empty() {
+            return Err(YuniError::Codegen(CodegenError::InvalidType {
+                message: "空の配列は型推論できません".to_string(),
+                span: array.span,
+            }));
+        }
+
+        // 各要素をコンパイル
+        let mut compiled_elements = Vec::new();
+        for element in &array.elements {
+            compiled_elements.push(self.compile_expression(element)?);
+        }
+
+        // 最初の要素の型を基準とする
+        let element_type = compiled_elements[0].get_type();
+        
+        // 配列をヒープに割り当て（動的配列として実装）
+        let array_size = self.context.i64_type().const_int(array.elements.len() as u64, false);
+        let element_size = element_type.size_of().unwrap();
+        let total_size = self.builder.build_int_mul(array_size, element_size, "array_total_size")?;
+        
+        // メモリ割り当て（mallocを使用）
+        let alloc_fn = self.runtime_manager.get_function("malloc")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "malloc function not found".to_string(),
+            }))?;
+        
+        let array_ptr = self.builder.build_call(
+            alloc_fn,
+            &[total_size.into()],
+            "array_alloc"
+        )?.try_as_basic_value().left()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::InvalidType {
+                message: "メモリ割り当て関数が値を返しませんでした".to_string(),
+                span: array.span,
+            }))?;
+
+        // 配列ポインタを適切な型にキャスト
+        let array_ptr = array_ptr.into_pointer_value();
+        let typed_array_ptr = self.builder.build_pointer_cast(
+            array_ptr,
+            self.context.ptr_type(AddressSpace::default()),
+            "typed_array_ptr"
+        )?;
+
+        // 各要素を配列にコピー
+        for (i, element_value) in compiled_elements.into_iter().enumerate() {
+            let index = self.context.i64_type().const_int(i as u64, false);
+            let element_ptr = unsafe {
+                self.builder.build_gep(
+                    element_type,
+                    typed_array_ptr,
+                    &[index],
+                    &format!("array_element_{}", i)
+                )?
+            };
+            self.builder.build_store(element_ptr, element_value)?;
+        }
+
+        Ok(typed_array_ptr.into())
     }
 
     /// タプル式をコンパイル
