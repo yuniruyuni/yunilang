@@ -12,6 +12,8 @@ pub enum Token {
     Package,
     #[token("import")]
     Import,
+    #[token("pub")]
+    Pub,
     #[token("fn")]
     Fn,
     #[token("let")]
@@ -226,6 +228,7 @@ impl fmt::Display for Token {
         match self {
             Token::Package => write!(f, "package"),
             Token::Import => write!(f, "import"),
+            Token::Pub => write!(f, "pub"),
             Token::Fn => write!(f, "fn"),
             Token::Let => write!(f, "let"),
             Token::Mut => write!(f, "mut"),

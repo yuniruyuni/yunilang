@@ -8,25 +8,42 @@ use super::{ParseResult, Parser};
 impl Parser {
     /// アイテムを解析
     pub(super) fn parse_item(&mut self) -> ParseResult<Item> {
+        // 可視性修飾子をチェック
+        let is_public = if self.check(&Token::Pub) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
         match self.current_token() {
             Some(Token::Type) => {
+                if is_public {
+                    return Err(self.error("Type definitions cannot have visibility modifiers".to_string()));
+                }
                 let type_def = self.parse_type_def()?;
                 Ok(Item::TypeDef(type_def))
             }
             Some(Token::Struct) => {
+                if is_public {
+                    return Err(self.error("Struct definitions cannot have visibility modifiers".to_string()));
+                }
                 let struct_def = self.parse_struct_def()?;
                 Ok(Item::TypeDef(TypeDef::Struct(struct_def)))
             }
             Some(Token::Enum) => {
+                if is_public {
+                    return Err(self.error("Enum definitions cannot have visibility modifiers".to_string()));
+                }
                 let enum_def = self.parse_enum_def()?;
                 Ok(Item::TypeDef(TypeDef::Enum(enum_def)))
             }
             Some(Token::Fn) => {
-                let func = self.parse_function_decl()?;
+                let func = self.parse_function_decl_with_visibility(is_public)?;
                 Ok(Item::Function(func))
             }
             Some(Token::Impl) => {
-                let method = self.parse_method_decl()?;
+                let method = self.parse_method_decl_with_visibility(is_public)?;
                 Ok(Item::Method(method))
             }
             _ => Err(self.error("Expected item declaration".to_string())),
@@ -173,10 +190,9 @@ impl Parser {
         self.parse_enum_body(name)
     }
 
-    /// 関数宣言を解析
-    pub(super) fn parse_function_decl(&mut self) -> ParseResult<FunctionDecl> {
+    /// 関数宣言を解析（可視性修飾子付き）
+    fn parse_function_decl_with_visibility(&mut self, is_public: bool) -> ParseResult<FunctionDecl> {
         let start = self.current_span().start;
-        let is_public = false; // TODO: 可視性修飾子の処理
 
         self.expect(Token::Fn)?;
         let name = self.expect_identifier()?;
@@ -224,10 +240,9 @@ impl Parser {
         })
     }
 
-    /// メソッド宣言を解析
-    fn parse_method_decl(&mut self) -> ParseResult<MethodDecl> {
+    /// メソッド宣言を解析（可視性修飾子付き）
+    fn parse_method_decl_with_visibility(&mut self, is_public: bool) -> ParseResult<MethodDecl> {
         let start = self.current_span().start;
-        let is_public = false; // TODO: 可視性修飾子の処理
 
         self.expect(Token::Impl)?;
         self.expect(Token::Fn)?;
