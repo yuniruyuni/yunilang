@@ -465,10 +465,41 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }))
                 }
             }
-            _ => Err(YuniError::Codegen(CodegenError::Unimplemented {
-                feature: "Type inference not implemented for this expression".to_string(),
-                span: expr.span(),
-            })),
+            Expression::Match(match_expr) => {
+                // match式の場合、全てのアームの型を確認
+                if match_expr.arms.is_empty() {
+                    return Err(YuniError::Codegen(CodegenError::InvalidType {
+                        message: "Empty match expression".to_string(),
+                        span: match_expr.span,
+                    }));
+                }
+                
+                // 最初のアームの型を取得
+                let first_arm_type = self.expression_type(&match_expr.arms[0].expr)?;
+                
+                // すべてのアームが同じ型を返すことを確認
+                for arm in &match_expr.arms[1..] {
+                    let arm_type = self.expression_type(&arm.expr)?;
+                    if arm_type != first_arm_type {
+                        // 型が異なる場合はunit型として扱う
+                        return Ok(Type::I32); // unit型の代わりにi32(0)を使用
+                    }
+                }
+                
+                Ok(first_arm_type)
+            }
+            Expression::Assignment(assign_expr) => {
+                // 代入式の型は右辺の型
+                self.expression_type(&assign_expr.value)
+            }
+            Expression::Cast(cast_expr) => {
+                // キャスト式の型は指定された型
+                Ok(cast_expr.ty.clone())
+            }
+            Expression::TemplateString(_) => {
+                // テンプレート文字列の型はString
+                Ok(Type::String)
+            }
         }
     }
 }

@@ -127,6 +127,16 @@ impl<'ctx> ScopeManager<'ctx> {
         }
     }
     
+    /// 変数を定義（簡易版）
+    pub fn define_variable(&mut self, name: String, ptr: inkwell::values::PointerValue<'ctx>, ty: crate::ast::Type, is_mut: bool) {
+        let symbol = Symbol {
+            ptr,
+            ty,
+            is_mutable: is_mut,
+        };
+        self.define(name, symbol);
+    }
+    
     /// 変数を検索（全スコープから）
     pub fn lookup(&self, name: &str) -> Option<&Symbol<'ctx>> {
         for scope in self.scopes.iter().rev() {
