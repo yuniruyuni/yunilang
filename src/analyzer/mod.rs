@@ -8,7 +8,6 @@ mod borrow_checker;
 mod lifetime;
 pub mod monomorphization;
 mod symbol;
-mod tail_position;
 mod type_checker;
 mod type_env;
 mod type_inference;
