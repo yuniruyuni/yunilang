@@ -1,0 +1,8 @@
+package main
+
+type UserID i32
+
+fn main() {
+    let id: UserID = 42;
+    println("ID: ", id);
+}

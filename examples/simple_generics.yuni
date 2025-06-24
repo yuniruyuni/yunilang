@@ -1,0 +1,20 @@
+package main
+
+// ジェネリック関数の例
+fn identity<T>(x: T): T {
+    return x;
+}
+
+fn main() {
+    // 整数での使用
+    let a = identity(42);
+    println("identity(42) = ", a);
+    
+    // 文字列での使用
+    let b = identity("Hello");
+    println("identity(\"Hello\") = ", b);
+    
+    // 浮動小数点での使用
+    let c = identity(3.14);
+    println("identity(3.14) = ", c);
+}
