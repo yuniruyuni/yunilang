@@ -175,6 +175,7 @@ impl<'a> TypeInference<'a> {
     
     /// 型変数の置換を収集（内部実装）
     #[allow(dead_code)]
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_substitutions(
         &self,
         generic_type: &Type,
@@ -243,6 +244,7 @@ impl<'a> TypeInference<'a> {
     
     /// 型に置換を適用
     #[allow(dead_code)]
+    #[allow(clippy::only_used_in_recursion)]
     pub fn apply_substitutions(&self, ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
         match ty {
             Type::Variable(name) => {

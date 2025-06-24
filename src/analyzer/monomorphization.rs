@@ -385,6 +385,7 @@ impl Monomorphizer {
     }
     
     /// 型を統一（簡易版）
+    #[allow(clippy::only_used_in_recursion)]
     fn unify_types(&self, param_type: &Type, arg_type: &Type, type_map: &mut HashMap<String, Type>) {
         match (param_type, arg_type) {
             (Type::Variable(name), _) => {
@@ -458,21 +459,15 @@ impl Monomorphizer {
             }
             Expression::Field(field_expr) => {
                 // フィールドアクセスの型推論
-                if let Some(object_type) = self.infer_expr_type(&field_expr.object) {
-                    // 簡易的にフィールドの型を推論（実際はもっと複雑）
-                    match &object_type {
-                        Type::Generic(struct_name, type_args) => {
-                            if let Some(struct_def) = self.generic_structs.get(struct_name) {
-                                // フィールドを探す
-                                for field in &struct_def.fields {
-                                    if field.name == field_expr.field {
-                                        // 型変数を置換
-                                        return Some(self.substitute_type_vars(&field.ty, struct_def, type_args));
-                                    }
-                                }
+                if let Some(Type::Generic(struct_name, type_args)) = self.infer_expr_type(&field_expr.object) {
+                    if let Some(struct_def) = self.generic_structs.get(&struct_name) {
+                        // フィールドを探す
+                        for field in &struct_def.fields {
+                            if field.name == field_expr.field {
+                                // 型変数を置換
+                                return Some(self.substitute_type_vars(&field.ty, struct_def, &type_args));
                             }
                         }
-                        _ => {}
                     }
                 }
                 None
@@ -606,6 +601,7 @@ impl Monomorphizer {
     }
     
     /// 型を置換
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_type(&self, ty: &Type, type_map: &HashMap<String, Type>) -> Type {
         match ty {
             Type::Variable(name) => {
@@ -651,7 +647,7 @@ impl Monomorphizer {
         }
         Ok(Block {
             statements: new_statements,
-            span: block.span.clone(),
+            span: block.span,
         })
     }
     
@@ -667,7 +663,7 @@ impl Monomorphizer {
                     pattern: let_stmt.pattern.clone(),
                     ty: new_ty,
                     init: new_init,
-                    span: let_stmt.span.clone(),
+                    span: let_stmt.span,
                 }))
             }
             Statement::Expression(expr) => {
@@ -679,7 +675,7 @@ impl Monomorphizer {
                 Ok(Statement::Assignment(AssignStatement {
                     target: new_target,
                     value: new_value,
-                    span: assign.span.clone(),
+                    span: assign.span,
                 }))
             }
             Statement::Return(ret_stmt) => {
@@ -688,7 +684,7 @@ impl Monomorphizer {
                     .transpose()?;
                 Ok(Statement::Return(ReturnStatement {
                     value: new_value,
-                    span: ret_stmt.span.clone(),
+                    span: ret_stmt.span,
                 }))
             }
             Statement::If(if_stmt) => {
@@ -711,7 +707,7 @@ impl Monomorphizer {
                     condition: new_condition,
                     then_branch: new_then,
                     else_branch: new_else,
-                    span: if_stmt.span.clone(),
+                    span: if_stmt.span,
                 }))
             }
             Statement::While(while_stmt) => {
@@ -720,7 +716,7 @@ impl Monomorphizer {
                 Ok(Statement::While(WhileStatement {
                     condition: new_condition,
                     body: new_body,
-                    span: while_stmt.span.clone(),
+                    span: while_stmt.span,
                 }))
             }
             Statement::For(for_stmt) => {
@@ -740,7 +736,7 @@ impl Monomorphizer {
                     condition: new_condition,
                     update: new_update,
                     body: new_body,
-                    span: for_stmt.span.clone(),
+                    span: for_stmt.span,
                 }))
             }
             Statement::Block(block) => {
@@ -761,7 +757,7 @@ impl Monomorphizer {
                 Ok(Expression::Call(CallExpr {
                     callee: Box::new(new_callee),
                     args: new_args,
-                    span: call.span.clone(),
+                    span: call.span,
                     is_tail: call.is_tail,
                 }))
             }
@@ -776,7 +772,7 @@ impl Monomorphizer {
                 Ok(Expression::StructLit(StructLiteral {
                     name: struct_lit.name.clone(),
                     fields: new_fields,
-                    span: struct_lit.span.clone(),
+                    span: struct_lit.span,
                 }))
             }
             Expression::Binary(binary) => {
@@ -786,7 +782,7 @@ impl Monomorphizer {
                     left: Box::new(new_left),
                     op: binary.op.clone(),
                     right: Box::new(new_right),
-                    span: binary.span.clone(),
+                    span: binary.span,
                 }))
             }
             Expression::Unary(unary) => {
@@ -794,7 +790,7 @@ impl Monomorphizer {
                 Ok(Expression::Unary(UnaryExpr {
                     op: unary.op.clone(),
                     expr: Box::new(new_expr),
-                    span: unary.span.clone(),
+                    span: unary.span,
                 }))
             }
             Expression::Field(field) => {
@@ -802,7 +798,7 @@ impl Monomorphizer {
                 Ok(Expression::Field(FieldExpr {
                     object: Box::new(new_object),
                     field: field.field.clone(),
-                    span: field.span.clone(),
+                    span: field.span,
                 }))
             }
             Expression::Index(index) => {
@@ -811,7 +807,7 @@ impl Monomorphizer {
                 Ok(Expression::Index(IndexExpr {
                     object: Box::new(new_object),
                     index: Box::new(new_index),
-                    span: index.span.clone(),
+                    span: index.span,
                 }))
             }
             Expression::Block(block) => {
@@ -826,7 +822,7 @@ impl Monomorphizer {
                 Ok(Expression::Block(BlockExpr {
                     statements: new_statements,
                     last_expr: new_last_expr,
-                    span: block.span.clone(),
+                    span: block.span,
                 }))
             }
             Expression::If(if_expr) => {
@@ -840,7 +836,7 @@ impl Monomorphizer {
                     condition: new_condition,
                     then_branch: new_then,
                     else_branch: new_else,
-                    span: if_expr.span.clone(),
+                    span: if_expr.span,
                 }))
             }
             Expression::Match(match_expr) => {
@@ -858,7 +854,7 @@ impl Monomorphizer {
                 Ok(Expression::Match(MatchExpr {
                     expr: new_expr,
                     arms: new_arms,
-                    span: match_expr.span.clone(),
+                    span: match_expr.span,
                 }))
             }
             Expression::Reference(ref_expr) => {
@@ -866,14 +862,14 @@ impl Monomorphizer {
                 Ok(Expression::Reference(ReferenceExpr {
                     expr: new_expr,
                     is_mut: ref_expr.is_mut,
-                    span: ref_expr.span.clone(),
+                    span: ref_expr.span,
                 }))
             }
             Expression::Dereference(deref) => {
                 let new_expr = Box::new(self.substitute_expr(&deref.expr, type_map)?);
                 Ok(Expression::Dereference(DereferenceExpr {
                     expr: new_expr,
-                    span: deref.span.clone(),
+                    span: deref.span,
                 }))
             }
             Expression::Cast(cast) => {
@@ -882,7 +878,7 @@ impl Monomorphizer {
                 Ok(Expression::Cast(CastExpr {
                     expr: new_expr,
                     ty: new_ty,
-                    span: cast.span.clone(),
+                    span: cast.span,
                 }))
             }
             Expression::MethodCall(method_call) => {
@@ -895,7 +891,7 @@ impl Monomorphizer {
                     object: new_object,
                     method: method_call.method.clone(),
                     args: new_args,
-                    span: method_call.span.clone(),
+                    span: method_call.span,
                 }))
             }
             Expression::Array(array) => {
@@ -905,7 +901,7 @@ impl Monomorphizer {
                 }
                 Ok(Expression::Array(ArrayExpr {
                     elements: new_elements,
-                    span: array.span.clone(),
+                    span: array.span,
                 }))
             }
             Expression::Tuple(tuple) => {
@@ -915,7 +911,7 @@ impl Monomorphizer {
                 }
                 Ok(Expression::Tuple(TupleExpr {
                     elements: new_elements,
-                    span: tuple.span.clone(),
+                    span: tuple.span,
                 }))
             }
             Expression::Assignment(assign) => {
@@ -924,7 +920,7 @@ impl Monomorphizer {
                 Ok(Expression::Assignment(AssignmentExpr {
                     target: new_target,
                     value: new_value,
-                    span: assign.span.clone(),
+                    span: assign.span,
                 }))
             }
             Expression::EnumVariant(variant) => {
@@ -952,7 +948,7 @@ impl Monomorphizer {
                     enum_name: variant.enum_name.clone(),
                     variant: variant.variant.clone(),
                     fields: new_fields,
-                    span: variant.span.clone(),
+                    span: variant.span,
                 }))
             }
             // リテラルはそのまま返す
@@ -986,7 +982,7 @@ impl Monomorphizer {
         }
         Ok(Block {
             statements: new_statements,
-            span: block.span.clone(),
+            span: block.span,
         })
     }
     
@@ -1001,7 +997,7 @@ impl Monomorphizer {
                     pattern: let_stmt.pattern.clone(),
                     ty: let_stmt.ty.clone(),
                     init: new_init,
-                    span: let_stmt.span.clone(),
+                    span: let_stmt.span,
                 }))
             }
             Statement::Expression(expr) => {
@@ -1011,7 +1007,7 @@ impl Monomorphizer {
                 Ok(Statement::Assignment(AssignStatement {
                     target: self.replace_calls_in_expr(&assign.target)?,
                     value: self.replace_calls_in_expr(&assign.value)?,
-                    span: assign.span.clone(),
+                    span: assign.span,
                 }))
             }
             Statement::Return(ret_stmt) => {
@@ -1020,7 +1016,7 @@ impl Monomorphizer {
                     .transpose()?;
                 Ok(Statement::Return(ReturnStatement {
                     value: new_value,
-                    span: ret_stmt.span.clone(),
+                    span: ret_stmt.span,
                 }))
             }
             Statement::If(if_stmt) => {
@@ -1043,14 +1039,14 @@ impl Monomorphizer {
                     condition: new_condition,
                     then_branch: new_then,
                     else_branch: new_else,
-                    span: if_stmt.span.clone(),
+                    span: if_stmt.span,
                 }))
             }
             Statement::While(while_stmt) => {
                 Ok(Statement::While(WhileStatement {
                     condition: self.replace_calls_in_expr(&while_stmt.condition)?,
                     body: self.replace_calls_in_block(&while_stmt.body)?,
-                    span: while_stmt.span.clone(),
+                    span: while_stmt.span,
                 }))
             }
             Statement::For(for_stmt) => {
@@ -1069,7 +1065,7 @@ impl Monomorphizer {
                     condition: new_condition,
                     update: new_update,
                     body: self.replace_calls_in_block(&for_stmt.body)?,
-                    span: for_stmt.span.clone(),
+                    span: for_stmt.span,
                 }))
             }
             Statement::Block(block) => {
@@ -1093,10 +1089,10 @@ impl Monomorphizer {
                             return Ok(Expression::Call(CallExpr {
                                 callee: Box::new(Expression::Identifier(Identifier {
                                     name: mangled_name,
-                                    span: ident.span.clone(),
+                                    span: ident.span,
                                 })),
                                 args: call.args.clone(),
-                                span: call.span.clone(),
+                                span: call.span,
                                 is_tail: call.is_tail,
                             }));
                         }
@@ -1111,7 +1107,7 @@ impl Monomorphizer {
                 Ok(Expression::Call(CallExpr {
                     callee: call.callee.clone(),
                     args: new_args,
-                    span: call.span.clone(),
+                    span: call.span,
                     is_tail: call.is_tail,
                 }))
             }
@@ -1133,7 +1129,7 @@ impl Monomorphizer {
                         return Ok(Expression::StructLit(StructLiteral {
                             name: mangled_name,
                             fields: new_fields,
-                            span: struct_lit.span.clone(),
+                            span: struct_lit.span,
                         }));
                     }
                 }
@@ -1149,7 +1145,7 @@ impl Monomorphizer {
                 Ok(Expression::StructLit(StructLiteral {
                     name: struct_lit.name.clone(),
                     fields: new_fields,
-                    span: struct_lit.span.clone(),
+                    span: struct_lit.span,
                 }))
             }
             Expression::Binary(binary) => {
@@ -1159,7 +1155,7 @@ impl Monomorphizer {
                     left: Box::new(new_left),
                     op: binary.op.clone(),
                     right: Box::new(new_right),
-                    span: binary.span.clone(),
+                    span: binary.span,
                 }))
             }
             Expression::Block(block) => {
@@ -1174,7 +1170,7 @@ impl Monomorphizer {
                 Ok(Expression::Block(BlockExpr {
                     statements: new_statements,
                     last_expr: new_last_expr,
-                    span: block.span.clone(),
+                    span: block.span,
                 }))
             }
             Expression::Field(field) => {
@@ -1182,7 +1178,7 @@ impl Monomorphizer {
                 Ok(Expression::Field(FieldExpr {
                     object: Box::new(new_object),
                     field: field.field.clone(),
-                    span: field.span.clone(),
+                    span: field.span,
                 }))
             }
             Expression::If(if_expr) => {
@@ -1196,7 +1192,7 @@ impl Monomorphizer {
                     condition: new_condition,
                     then_branch: new_then,
                     else_branch: new_else,
-                    span: if_expr.span.clone(),
+                    span: if_expr.span,
                 }))
             }
             Expression::Match(match_expr) => {
@@ -1214,7 +1210,7 @@ impl Monomorphizer {
                 Ok(Expression::Match(MatchExpr {
                     expr: new_expr,
                     arms: new_arms,
-                    span: match_expr.span.clone(),
+                    span: match_expr.span,
                 }))
             }
             // リテラルなどはそのまま
@@ -1223,6 +1219,7 @@ impl Monomorphizer {
     }
     
     /// 型を文字列に変換（マングリング用）
+    #[allow(clippy::only_used_in_recursion)]
     fn type_to_string(&self, ty: &Type) -> String {
         match ty {
             Type::I8 => "i8".to_string(),

@@ -20,15 +20,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                 
                 // yuni_int_to_string は i64 を期待するので、必要に応じて拡張
                 let i64_type = self.context.i64_type();
-                let int_val_as_i64 = if int_val.get_type().get_bit_width() < 64 {
-                    // 符号付き拡張（i8, i16, i32 -> i64）
-                    self.builder.build_int_s_extend(int_val, i64_type, "sext_to_i64")?
-                } else if int_val.get_type().get_bit_width() > 64 {
-                    // 切り詰め（i128 -> i64）
-                    self.builder.build_int_truncate(int_val, i64_type, "trunc_to_i64")?
-                } else {
-                    // 既に i64
-                    int_val
+                let int_val_as_i64 = match int_val.get_type().get_bit_width().cmp(&64) {
+                    std::cmp::Ordering::Less => {
+                        // 符号付き拡張（i8, i16, i32 -> i64）
+                        self.builder.build_int_s_extend(int_val, i64_type, "sext_to_i64")?
+                    }
+                    std::cmp::Ordering::Greater => {
+                        // 切り詰め（i128 -> i64）
+                        self.builder.build_int_truncate(int_val, i64_type, "trunc_to_i64")?
+                    }
+                    std::cmp::Ordering::Equal => {
+                        // 既に i64
+                        int_val
+                    }
                 };
                 
                 let result = self.builder.build_call(

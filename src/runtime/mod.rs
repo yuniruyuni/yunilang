@@ -176,8 +176,7 @@ pub extern "C" fn yuni_alloc_string(size: i64) -> *mut c_char {
     if size <= 0 {
         return std::ptr::null_mut();
     }
-    let mut vec = Vec::<u8>::with_capacity(size as usize + 1); // +1 for null terminator
-    vec.resize(size as usize + 1, 0);
+    let mut vec = vec![0u8; size as usize + 1]; // +1 for null terminator
     let ptr = vec.as_mut_ptr() as *mut c_char;
     std::mem::forget(vec);
     ptr

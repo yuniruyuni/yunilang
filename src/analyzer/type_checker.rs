@@ -581,6 +581,7 @@ impl TypeChecker {
     }
     
     /// 型に型パラメータの置換を適用
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_type(&self, ty: &Type, substitutions: &std::collections::HashMap<String, Type>) -> Type {
         match ty {
             Type::Variable(name) => {
