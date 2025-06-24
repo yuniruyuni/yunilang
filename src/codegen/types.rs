@@ -120,6 +120,13 @@ impl<'ctx> TypeManager<'ctx> {
                     span: crate::ast::Span::dummy(),
                 }))
             }
+            Type::TypeVariable(_) | Type::Generic(_, _) => {
+                // ジェネリック型は具体化されるまでコード生成できない
+                Err(YuniError::Codegen(CodegenError::Unimplemented {
+                    feature: format!("Generic types must be instantiated before code generation: {:?}", ty),
+                    span: crate::ast::Span::dummy(),
+                }))
+            }
         }
     }
     

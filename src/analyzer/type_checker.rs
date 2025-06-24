@@ -148,6 +148,23 @@ impl TypeChecker {
                 }
                 self.validate_type(&fn_type.return_type, span)?;
             }
+            Type::TypeVariable(_) => {
+                // 型変数は型パラメータとして定義されていることを前提とする
+                // TODO: 型パラメータスコープのチェック
+            }
+            Type::Generic(name, args) => {
+                // ジェネリック型の基本型が存在するかチェック
+                if !self.types.contains_key(name) {
+                    return Err(AnalysisError::UndefinedType {
+                        name: name.clone(),
+                        span,
+                    });
+                }
+                // 型引数もチェック
+                for arg in args {
+                    self.validate_type(arg, span)?;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -193,6 +210,11 @@ impl TypeChecker {
             Type::Function(fn_type) => {
                 let param_strs: Vec<String> = fn_type.params.iter().map(|p| self.type_to_string(p)).collect();
                 format!("fn({}) -> {}", param_strs.join(", "), self.type_to_string(&fn_type.return_type))
+            }
+            Type::TypeVariable(name) => name.clone(),
+            Type::Generic(name, args) => {
+                let arg_strs: Vec<String> = args.iter().map(|a| self.type_to_string(a)).collect();
+                format!("{}<{}>", name, arg_strs.join(", "))
             }
         }
     }

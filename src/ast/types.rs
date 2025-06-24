@@ -39,6 +39,10 @@ pub enum Type {
 
     // ユーザー定義型
     UserDefined(String),
+    
+    // ジェネリック型
+    TypeVariable(String), // 型変数（例：T, U）
+    Generic(String, Vec<Type>), // ジェネリック型（例：Vec<T>, HashMap<K, V>）
 }
 
 /// 関数型

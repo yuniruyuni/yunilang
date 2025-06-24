@@ -54,16 +54,23 @@ impl Parser {
     fn parse_type_def(&mut self) -> ParseResult<TypeDef> {
         self.expect(Token::Type)?;
         let name = self.expect_identifier()?;
+        
+        // 型パラメータ（オプション）
+        let type_params = if self.check(&Token::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
 
         match self.current_token() {
             Some(Token::Struct) => {
                 self.advance();
-                let struct_def = self.parse_struct_body(name)?;
+                let struct_def = self.parse_struct_body(name, type_params)?;
                 Ok(TypeDef::Struct(struct_def))
             }
             Some(Token::Enum) => {
                 self.advance();
-                let enum_def = self.parse_enum_body(name)?;
+                let enum_def = self.parse_enum_body(name, type_params)?;
                 Ok(TypeDef::Enum(enum_def))
             }
             _ => Err(self.error("Expected 'struct' or 'enum' after type name".to_string())),
@@ -71,7 +78,7 @@ impl Parser {
     }
 
     /// 構造体本体を解析
-    fn parse_struct_body(&mut self, name: String) -> ParseResult<StructDef> {
+    fn parse_struct_body(&mut self, name: String, type_params: Vec<TypeParam>) -> ParseResult<StructDef> {
         let start = self.current_span().start;
         self.expect(Token::LeftBrace)?;
 
@@ -97,11 +104,11 @@ impl Parser {
         self.expect(Token::RightBrace)?;
         let span = self.span_from(start);
 
-        Ok(StructDef { name, fields, span })
+        Ok(StructDef { name, type_params, fields, span })
     }
 
     /// 列挙型本体を解析
-    fn parse_enum_body(&mut self, name: String) -> ParseResult<EnumDef> {
+    fn parse_enum_body(&mut self, name: String, type_params: Vec<TypeParam>) -> ParseResult<EnumDef> {
         let start = self.current_span().start;
         self.expect(Token::LeftBrace)?;
 
@@ -169,6 +176,7 @@ impl Parser {
 
         Ok(EnumDef {
             name,
+            type_params,
             variants,
             span,
         })
@@ -179,7 +187,14 @@ impl Parser {
         self.expect(Token::Struct)?;
         let name = self.expect_identifier()?;
         
-        self.parse_struct_body(name)
+        // 型パラメータ（オプション）
+        let type_params = if self.check(&Token::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+        
+        self.parse_struct_body(name, type_params)
     }
 
     /// 列挙型定義を解析（`enum Name { ... }` 構文）
@@ -187,7 +202,14 @@ impl Parser {
         self.expect(Token::Enum)?;
         let name = self.expect_identifier()?;
         
-        self.parse_enum_body(name)
+        // 型パラメータ（オプション）
+        let type_params = if self.check(&Token::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+        
+        self.parse_enum_body(name, type_params)
     }
 
     /// 関数宣言を解析（可視性修飾子付き）
@@ -247,6 +269,13 @@ impl Parser {
         self.expect(Token::Impl)?;
         self.expect(Token::Fn)?;
         let name = self.expect_identifier()?;
+        
+        // 型パラメータ（オプション）
+        let type_params = if self.check(&Token::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
 
         // レシーバー
         self.expect(Token::LeftParen)?;
@@ -282,6 +311,7 @@ impl Parser {
         Ok(MethodDecl {
             is_public,
             name,
+            type_params,
             receiver,
             params,
             return_type,

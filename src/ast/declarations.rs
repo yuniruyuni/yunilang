@@ -23,6 +23,7 @@ pub enum TypeDef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StructDef {
     pub name: String,
+    pub type_params: Vec<TypeParam>,
     pub fields: Vec<Field>,
     pub span: Span,
 }
@@ -39,6 +40,7 @@ pub struct Field {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnumDef {
     pub name: String,
+    pub type_params: Vec<TypeParam>,
     pub variants: Vec<Variant>,
     pub span: Span,
 }
@@ -69,6 +71,7 @@ pub struct FunctionDecl {
 pub struct MethodDecl {
     pub is_public: bool,
     pub name: String,
+    pub type_params: Vec<TypeParam>,
     pub receiver: Receiver,
     pub params: Vec<Param>,
     pub return_type: Option<Box<Type>>,

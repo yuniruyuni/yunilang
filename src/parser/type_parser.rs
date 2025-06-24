@@ -150,11 +150,23 @@ impl Parser {
                 }))
             }
 
-            // ユーザー定義型
+            // ユーザー定義型またはジェネリック型
             Some(Token::Identifier(name)) => {
                 let name = name.clone();
                 self.advance();
-                Ok(Type::UserDefined(name))
+                
+                // ジェネリック型の型引数をチェック
+                if self.check(&Token::Lt) {
+                    let type_args = self.parse_type_arguments()?;
+                    Ok(Type::Generic(name, type_args))
+                } else {
+                    // 単一の大文字で始まる識別子は型変数として扱う
+                    if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
+                        Ok(Type::TypeVariable(name))
+                    } else {
+                        Ok(Type::UserDefined(name))
+                    }
+                }
             }
 
             _ => Err(self.error("Expected type".to_string())),
@@ -182,5 +194,22 @@ impl Parser {
 
         self.expect(Token::Gt)?;
         Ok(params)
+    }
+    
+    /// 型引数を解析（例：<i32>, <T, U>）
+    pub(super) fn parse_type_arguments(&mut self) -> ParseResult<Vec<Type>> {
+        let mut args = Vec::new();
+        self.expect(Token::Lt)?;
+
+        while !self.check(&Token::Gt) && !self.is_at_end() {
+            args.push(self.parse_type()?);
+
+            if !self.check(&Token::Gt) {
+                self.expect(Token::Comma)?;
+            }
+        }
+
+        self.expect(Token::Gt)?;
+        Ok(args)
     }
 }

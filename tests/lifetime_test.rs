@@ -104,6 +104,7 @@ fn test_lifetime_parameters_in_method() {
     let method = yunilang::ast::MethodDecl {
         is_public: false,
         name: "concat".to_string(),
+        type_params: vec![],
         receiver: yunilang::ast::Receiver {
             name: Some("self".to_string()),
             ty: yunilang::ast::Type::Reference(
