@@ -920,4 +920,33 @@ mod tests {
         // 符号付き比較の確認
         assert!(ir.contains("icmp slt"), "Should use signed comparison for i32");
     }
+
+    /// match式の文字列パターンのコード生成をテスト
+    #[test]
+    #[ignore = "Parser does not yet support match expressions syntax"]
+    fn test_match_string_patterns() {
+        let source = r#"
+            package test
+            
+            fn greet(name: string) -> string {
+                match name {
+                    "Alice" => "Hello, Alice!",
+                    "Bob" => "Hi, Bob!",
+                    _ => "Nice to meet you!"
+                }
+            }
+        "#;
+
+        let result = compile_to_ir(source, "test_match_string");
+        assert!(result.is_ok(), "Compilation should succeed: {:?}", result.unwrap_err());
+        
+        let ir = result.unwrap();
+        
+        // 文字列比較関数の呼び出しを確認
+        assert!(ir.contains("yuni_string_eq"), "Should call string equality function");
+        
+        // match式の基本構造を確認
+        assert!(ir.contains("br label"), "Should have branch instructions for match");
+        assert!(ir.contains("phi"), "Should have phi nodes for result merging");
+    }
 }

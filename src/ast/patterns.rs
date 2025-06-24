@@ -2,11 +2,23 @@
 
 use serde::{Deserialize, Serialize};
 
+/// リテラルパターン用のリテラル値
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum LiteralPattern {
+    Integer(i64),
+    Float(f64),
+    String(String),
+    Bool(bool),
+}
+
 /// パターン
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Pattern {
     /// 識別子パターン（変数バインディング）
     Identifier(String, bool), // name, is_mutable
+    
+    /// リテラルパターン
+    Literal(LiteralPattern),
     
     /// タプルパターン
     Tuple(Vec<Pattern>),
@@ -20,6 +32,9 @@ pub enum Pattern {
         variant: String,
         fields: EnumVariantPatternFields,
     },
+    
+    /// ワイルドカードパターン（_）
+    Wildcard,
 }
 
 /// 列挙型バリアントパターンのフィールド定義

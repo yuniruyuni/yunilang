@@ -13,6 +13,11 @@ impl Parser {
                 let name = name.clone();
                 self.advance();
                 
+                // ワイルドカードパターンのチェック
+                if name == "_" {
+                    return Ok(Pattern::Wildcard);
+                }
+                
                 // パス（Enum::Variant など）をチェック
                 if self.check(&Token::ColonColon) {
                     return self.parse_path_pattern(name);
@@ -48,6 +53,29 @@ impl Parser {
                 } else {
                     Ok(Pattern::Identifier(name, is_mut))
                 }
+            }
+            Some(Token::Integer(n)) => {
+                let value = *n as i64;
+                self.advance();
+                Ok(Pattern::Literal(LiteralPattern::Integer(value)))
+            }
+            Some(Token::Float(f)) => {
+                let value = *f;
+                self.advance();
+                Ok(Pattern::Literal(LiteralPattern::Float(value)))
+            }
+            Some(Token::String(s)) => {
+                let value = s.clone();
+                self.advance();
+                Ok(Pattern::Literal(LiteralPattern::String(value)))
+            }
+            Some(Token::True) => {
+                self.advance();
+                Ok(Pattern::Literal(LiteralPattern::Bool(true)))
+            }
+            Some(Token::False) => {
+                self.advance();
+                Ok(Pattern::Literal(LiteralPattern::Bool(false)))
             }
             Some(Token::LeftParen) => {
                 self.advance();

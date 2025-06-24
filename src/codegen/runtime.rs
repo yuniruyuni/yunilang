@@ -150,6 +150,15 @@ impl<'ctx> RuntimeManager<'ctx> {
         );
         self.functions.insert("yuni_println".to_string(), println);
         
+        // 文字列比較
+        let string_eq_type = bool_type.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+        let string_eq = module.add_function(
+            "yuni_string_eq",
+            string_eq_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_string_eq".to_string(), string_eq);
+        
         // エラーハンドリング
         let panic_type = void_type.fn_type(&[i8_ptr_type.into()], false);
         let panic = module.add_function(

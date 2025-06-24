@@ -85,6 +85,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     span: Span::dummy() 
                 }));
             }
+            Pattern::Literal(_) | Pattern::Wildcard => {
+                return Err(YuniError::Codegen(CodegenError::InvalidType {
+                    message: "Literal and wildcard patterns are not allowed in let statements".to_string(),
+                    span: Span::dummy()
+                }));
+            }
         }
 
         Ok(())

@@ -498,6 +498,10 @@ impl<'a> BorrowChecker<'a> {
                 }
                 Ok(())
             }
+            Pattern::Literal(_) | Pattern::Wildcard => {
+                // リテラルパターンとワイルドカードパターンは変数を導入しない
+                Ok(())
+            }
         }
     }
 }

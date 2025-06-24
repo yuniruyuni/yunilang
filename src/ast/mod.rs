@@ -40,4 +40,4 @@ pub use statements::{
 };
 
 // パターンを再エクスポート
-pub use patterns::{Pattern, EnumVariantPatternFields};
+pub use patterns::{Pattern, EnumVariantPatternFields, LiteralPattern};

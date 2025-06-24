@@ -158,6 +158,26 @@ pub extern "C" fn yuni_bool_to_string(b: bool) -> *mut c_char {
     }
 }
 
+/// Compare two strings for equality
+/// 
+/// # Safety
+/// `s1`と`s2`は有効なnull終端C文字列を指すポインタである必要があります。
+#[no_mangle]
+pub unsafe extern "C" fn yuni_string_eq(s1: *const c_char, s2: *const c_char) -> bool {
+    if s1.is_null() && s2.is_null() {
+        return true;
+    }
+    if s1.is_null() || s2.is_null() {
+        return false;
+    }
+    
+    // SAFETY: 呼び出し側が有効なnull終端C文字列を提供することを前提とする
+    let c_str1 = CStr::from_ptr(s1);
+    let c_str2 = CStr::from_ptr(s2);
+    
+    c_str1 == c_str2
+}
+
 /// Print string with newline (wrapper for yuni_println_str)
 /// 
 /// # Safety

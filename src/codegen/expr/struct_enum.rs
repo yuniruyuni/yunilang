@@ -64,25 +64,74 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 列挙型バリアントをコンパイル
     pub fn compile_enum_variant(&mut self, enum_var: &EnumVariantExpr) -> YuniResult<BasicValueEnum<'ctx>> {
-        // データを持たないバリアントのみ現在サポート
+        // バリアントのインデックスを取得
+        let key = (enum_var.enum_name.clone(), enum_var.variant.clone());
+        let variant_index = self.enum_variants.get(&key)
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: format!("{}::{}", enum_var.enum_name, enum_var.variant),
+                span: enum_var.span,
+            }))?;
+        
         match &enum_var.fields {
             crate::ast::EnumVariantFields::Unit => {
-                // バリアントのインデックスを取得
-                let key = (enum_var.enum_name.clone(), enum_var.variant.clone());
-                let variant_index = self.enum_variants.get(&key)
-                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
-                        name: format!("{}::{}", enum_var.enum_name, enum_var.variant),
-                        span: enum_var.span,
-                    }))?;
-                
                 // i32の定数として返す
                 Ok(self.context.i32_type().const_int(*variant_index as u64, false).into())
             }
-            _ => {
-                Err(YuniError::Codegen(CodegenError::Unimplemented {
-                    feature: "Enum variants with data not yet implemented".to_string(),
-                    span: enum_var.span,
-                }))
+            crate::ast::EnumVariantFields::Tuple(fields) => {
+                // タプル形式のデータを持つバリアント
+                // 構造: { discriminant: i32, data: tuple }
+                let discriminant = self.context.i32_type().const_int(*variant_index as u64, false);
+                
+                // フィールドの値をコンパイル
+                let mut field_values = vec![];
+                for field in fields {
+                    field_values.push(self.compile_expression(field)?);
+                }
+                
+                // データタプルを作成
+                let data_tuple = self.context.const_struct(&field_values, false);
+                
+                // Enum構造体を作成 { discriminant, data }
+                let enum_struct = self.context.struct_type(&[
+                    discriminant.get_type().into(),
+                    data_tuple.get_type().into(),
+                ], false);
+                
+                let mut enum_value = enum_struct.get_undef();
+                enum_value = self.builder.build_insert_value(enum_value, discriminant, 0, "enum_discriminant")?
+                    .into_struct_value();
+                enum_value = self.builder.build_insert_value(enum_value, data_tuple, 1, "enum_data")?
+                    .into_struct_value();
+                
+                Ok(enum_value.into())
+            }
+            crate::ast::EnumVariantFields::Struct(fields) => {
+                // 構造体形式のデータを持つバリアント
+                // 構造: { discriminant: i32, data: struct }
+                let discriminant = self.context.i32_type().const_int(*variant_index as u64, false);
+                
+                // フィールドの値をコンパイル
+                let mut field_values = vec![];
+                for init in fields {
+                    field_values.push(self.compile_expression(&init.value)?);
+                }
+                
+                // データ構造体を作成
+                let data_struct = self.context.const_struct(&field_values, false);
+                
+                // Enum構造体を作成 { discriminant, data }
+                let enum_struct = self.context.struct_type(&[
+                    discriminant.get_type().into(),
+                    data_struct.get_type().into(),
+                ], false);
+                
+                let mut enum_value = enum_struct.get_undef();
+                enum_value = self.builder.build_insert_value(enum_value, discriminant, 0, "enum_discriminant")?
+                    .into_struct_value();
+                enum_value = self.builder.build_insert_value(enum_value, data_struct, 1, "enum_data")?
+                    .into_struct_value();
+                
+                Ok(enum_value.into())
             }
         }
     }

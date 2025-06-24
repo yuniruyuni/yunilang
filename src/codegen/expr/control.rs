@@ -168,19 +168,86 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // 識別子パターンは常にマッチ
                 Ok(self.context.bool_type().const_all_ones())
             }
-            Pattern::EnumVariant { enum_name, variant, fields } => {
-                // enum値の比較
-                match fields {
-                    crate::ast::EnumVariantPatternFields::Unit => {
-                        // Unitバリアントの場合、値を比較
-                        let key = (enum_name.clone(), variant.clone());
-                        let expected_index = self.enum_variants.get(&key)
+            Pattern::Wildcard => {
+                // ワイルドカードパターンは常にマッチ
+                Ok(self.context.bool_type().const_all_ones())
+            }
+            Pattern::Literal(lit) => {
+                // リテラルパターンは値と比較
+                match (lit, value) {
+                    (LiteralPattern::Integer(expected), BasicValueEnum::IntValue(actual)) => {
+                        let expected_val = self.context.i64_type().const_int(*expected as u64, expected < &0);
+                        // 実際の値が異なるビット幅の場合、適切にキャストする
+                        let actual_64 = match actual.get_type().get_bit_width().cmp(&64) {
+                            std::cmp::Ordering::Less => {
+                                if *expected < 0 {
+                                    self.builder.build_int_s_extend(actual, self.context.i64_type(), "sext")?
+                                } else {
+                                    self.builder.build_int_z_extend(actual, self.context.i64_type(), "zext")?
+                                }
+                            }
+                            std::cmp::Ordering::Greater => {
+                                self.builder.build_int_truncate(actual, self.context.i64_type(), "trunc")?
+                            }
+                            std::cmp::Ordering::Equal => actual,
+                        };
+                        Ok(self.builder.build_int_compare(IntPredicate::EQ, actual_64, expected_val, "lit_match")?)
+                    }
+                    (LiteralPattern::Float(expected), BasicValueEnum::FloatValue(actual)) => {
+                        let expected_val = self.context.f64_type().const_float(*expected);
+                        Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OEQ, actual, expected_val, "lit_match")?)
+                    }
+                    (LiteralPattern::Bool(expected), BasicValueEnum::IntValue(actual)) => {
+                        let expected_val = self.context.bool_type().const_int(if *expected { 1 } else { 0 }, false);
+                        Ok(self.builder.build_int_compare(IntPredicate::EQ, actual, expected_val, "lit_match")?)
+                    }
+                    (LiteralPattern::String(expected), BasicValueEnum::PointerValue(actual)) => {
+                        // 文字列比較のランタイム関数を使用
+                        let expected_str = self.builder.build_global_string_ptr(expected, "expected_str")?.as_pointer_value();
+                        
+                        // yuni_string_eq関数を取得
+                        let string_eq_fn = self.runtime_manager.get_function("yuni_string_eq")
                             .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
-                                name: format!("{}::{}", enum_name, variant),
+                                name: "yuni_string_eq".to_string(),
                                 span,
                             }))?;
                         
-                        // 値がi32であることを確認
+                        // 文字列を比較
+                        let result = self.builder.build_call(
+                            string_eq_fn,
+                            &[expected_str.into(), actual.into()],
+                            "string_eq_result"
+                        )?;
+                        
+                        Ok(result.try_as_basic_value().left()
+                            .ok_or_else(|| YuniError::Codegen(CodegenError::TypeError {
+                                expected: "bool value".to_string(),
+                                actual: "void".to_string(),
+                                span,
+                            }))?
+                            .into_int_value())
+                    }
+                    _ => {
+                        Err(YuniError::Codegen(CodegenError::TypeError {
+                            expected: format!("{:?}", lit),
+                            actual: format!("{:?}", value.get_type()),
+                            span,
+                        }))
+                    }
+                }
+            }
+            Pattern::EnumVariant { enum_name, variant, fields } => {
+                // バリアントのインデックスを取得
+                let key = (enum_name.clone(), variant.clone());
+                let expected_index = self.enum_variants.get(&key)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                        name: format!("{}::{}", enum_name, variant),
+                        span,
+                    }))?;
+                
+                match fields {
+                    crate::ast::EnumVariantPatternFields::Unit => {
+                        // Unitバリアントの場合、値を直接比較
                         if let BasicValueEnum::IntValue(int_val) = value {
                             let expected = self.context.i32_type().const_int(*expected_index as u64, false);
                             Ok(self.builder.build_int_compare(IntPredicate::EQ, int_val, expected, "enum_match")?)
@@ -192,28 +259,142 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }))
                         }
                     }
-                    _ => {
-                        // データを持つバリアントは未実装
-                        Err(YuniError::Codegen(CodegenError::Unimplemented {
-                            feature: "Enum variants with data in patterns not yet implemented".to_string(),
-                            span,
-                        }))
+                    crate::ast::EnumVariantPatternFields::Tuple(patterns) => {
+                        // タプル形式のデータを持つバリアント
+                        if let BasicValueEnum::StructValue(struct_val) = value {
+                            // discriminantを抽出して比較
+                            let discriminant = self.builder.build_extract_value(struct_val, 0, "enum_discriminant")?
+                                .into_int_value();
+                            let expected = self.context.i32_type().const_int(*expected_index as u64, false);
+                            let discriminant_match = self.builder.build_int_compare(IntPredicate::EQ, discriminant, expected, "discriminant_match")?;
+                            
+                            // discriminantがマッチしない場合は早期リターン
+                            if patterns.is_empty() {
+                                return Ok(discriminant_match);
+                            }
+                            
+                            // データタプルを抽出
+                            let data_tuple = self.builder.build_extract_value(struct_val, 1, "enum_data")?;
+                            
+                            // 各フィールドのパターンマッチング
+                            let mut all_match = discriminant_match;
+                            for (i, pattern) in patterns.iter().enumerate() {
+                                let field_value = self.builder.build_extract_value(data_tuple.into_struct_value(), i as u32, &format!("field_{}", i))?;
+                                let field_match = self.compile_pattern_match(pattern, field_value, span)?;
+                                all_match = self.builder.build_and(all_match, field_match, &format!("field_match_{}", i))?;
+                            }
+                            
+                            Ok(all_match)
+                        } else {
+                            Err(YuniError::Codegen(CodegenError::TypeError {
+                                expected: "enum struct value".to_string(),
+                                actual: format!("{:?}", value.get_type()),
+                                span,
+                            }))
+                        }
+                    }
+                    crate::ast::EnumVariantPatternFields::Struct(field_patterns) => {
+                        // 構造体形式のデータを持つバリアント
+                        if let BasicValueEnum::StructValue(struct_val) = value {
+                            // discriminantを抽出して比較
+                            let discriminant = self.builder.build_extract_value(struct_val, 0, "enum_discriminant")?
+                                .into_int_value();
+                            let expected = self.context.i32_type().const_int(*expected_index as u64, false);
+                            let discriminant_match = self.builder.build_int_compare(IntPredicate::EQ, discriminant, expected, "discriminant_match")?;
+                            
+                            // discriminantがマッチしない場合は早期リターン
+                            if field_patterns.is_empty() {
+                                return Ok(discriminant_match);
+                            }
+                            
+                            // データ構造体を抽出
+                            let data_struct = self.builder.build_extract_value(struct_val, 1, "enum_data")?;
+                            
+                            // 各フィールドのパターンマッチング
+                            let mut all_match = discriminant_match;
+                            for (i, (_, pattern)) in field_patterns.iter().enumerate() {
+                                let field_value = self.builder.build_extract_value(data_struct.into_struct_value(), i as u32, &format!("field_{}", i))?;
+                                let field_match = self.compile_pattern_match(pattern, field_value, span)?;
+                                all_match = self.builder.build_and(all_match, field_match, &format!("field_match_{}", i))?;
+                            }
+                            
+                            Ok(all_match)
+                        } else {
+                            Err(YuniError::Codegen(CodegenError::TypeError {
+                                expected: "enum struct value".to_string(),
+                                actual: format!("{:?}", value.get_type()),
+                                span,
+                            }))
+                        }
                     }
                 }
             }
-            Pattern::Tuple(_) => {
-                // タプルパターンは未実装
-                Err(YuniError::Codegen(CodegenError::Unimplemented {
-                    feature: "Tuple patterns not yet implemented".to_string(),
-                    span,
-                }))
+            Pattern::Tuple(patterns) => {
+                // タプル値であることを確認
+                if let BasicValueEnum::StructValue(tuple_val) = value {
+                    // すべての要素がマッチするかチェック
+                    let mut all_match = self.context.bool_type().const_all_ones();
+                    
+                    for (i, pattern) in patterns.iter().enumerate() {
+                        // タプルの要素を抽出
+                        let element = self.builder.build_extract_value(tuple_val, i as u32, &format!("tuple_elem_{}", i))?;
+                        
+                        // 要素とパターンをマッチング
+                        let element_match = self.compile_pattern_match(pattern, element, span)?;
+                        
+                        // AND演算で結果を結合
+                        all_match = self.builder.build_and(all_match, element_match, &format!("tuple_match_{}", i))?;
+                    }
+                    
+                    Ok(all_match)
+                } else {
+                    Err(YuniError::Codegen(CodegenError::TypeError {
+                        expected: "tuple value".to_string(),
+                        actual: format!("{:?}", value.get_type()),
+                        span,
+                    }))
+                }
             }
-            Pattern::Struct(_, _) => {
-                // 構造体パターンは未実装
-                Err(YuniError::Codegen(CodegenError::Unimplemented {
-                    feature: "Struct patterns not yet implemented".to_string(),
-                    span,
-                }))
+            Pattern::Struct(struct_name, field_patterns) => {
+                // 構造体値であることを確認
+                if let BasicValueEnum::StructValue(struct_val) = value {
+                    // 構造体情報を取得
+                    let struct_info = self.struct_info.get(struct_name)
+                        .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                            name: struct_name.clone(),
+                            span,
+                        }))?
+                        .clone();
+                    
+                    // すべてのフィールドがマッチするかチェック
+                    let mut all_match = self.context.bool_type().const_all_ones();
+                    
+                    for (field_name, pattern) in field_patterns {
+                        // フィールドのインデックスを取得
+                        let field_index = struct_info.get_field_index(field_name)
+                            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                                name: format!("{}.{}", struct_name, field_name),
+                                span,
+                            }))?;
+                        
+                        // フィールドの値を抽出
+                        let field_value = self.builder.build_extract_value(struct_val, field_index, &format!("{}_value", field_name))?;
+                        
+                        // フィールドとパターンをマッチング
+                        let field_match = self.compile_pattern_match(pattern, field_value, span)?;
+                        
+                        // AND演算で結果を結合
+                        all_match = self.builder.build_and(all_match, field_match, &format!("{}_match", field_name))?;
+                    }
+                    
+                    Ok(all_match)
+                } else {
+                    Err(YuniError::Codegen(CodegenError::TypeError {
+                        expected: "struct value".to_string(),
+                        actual: format!("{:?}", value.get_type()),
+                        span,
+                    }))
+                }
             }
         }
     }
@@ -262,12 +443,62 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.scope_manager.define_variable(name.clone(), ptr, ty, *is_mut);
                 Ok(())
             }
-            Pattern::EnumVariant { .. } => {
-                // Enumバリアントパターンは変数をバインドしない（現在の実装では）
+            Pattern::Literal(_) | Pattern::Wildcard => {
+                // リテラルパターンとワイルドカードパターンは変数をバインドしない
                 Ok(())
             }
-            _ => {
-                // その他のパターンは未実装
+            Pattern::EnumVariant { fields, .. } => {
+                match fields {
+                    crate::ast::EnumVariantPatternFields::Unit => {
+                        // Unitバリアントは変数をバインドしない
+                        Ok(())
+                    }
+                    crate::ast::EnumVariantPatternFields::Tuple(patterns) => {
+                        // データを持つEnumバリアントの場合、データ部分を抽出
+                        if let BasicValueEnum::StructValue(struct_val) = value {
+                            let data_tuple = self.builder.build_extract_value(struct_val, 1, "enum_data")?;
+                            
+                            // 各フィールドパターンの変数をバインド
+                            for (i, pattern) in patterns.iter().enumerate() {
+                                let field_value = self.builder.build_extract_value(data_tuple.into_struct_value(), i as u32, &format!("field_{}", i))?;
+                                self.bind_pattern_variables(pattern, field_value)?;
+                            }
+                        }
+                        Ok(())
+                    }
+                    crate::ast::EnumVariantPatternFields::Struct(field_patterns) => {
+                        // データを持つEnumバリアントの場合、データ部分を抽出
+                        if let BasicValueEnum::StructValue(struct_val) = value {
+                            let data_struct = self.builder.build_extract_value(struct_val, 1, "enum_data")?;
+                            
+                            // 各フィールドパターンの変数をバインド
+                            for (i, (_, pattern)) in field_patterns.iter().enumerate() {
+                                let field_value = self.builder.build_extract_value(data_struct.into_struct_value(), i as u32, &format!("field_{}", i))?;
+                                self.bind_pattern_variables(pattern, field_value)?;
+                            }
+                        }
+                        Ok(())
+                    }
+                }
+            }
+            Pattern::Tuple(patterns) => {
+                // タプルの各要素の変数をバインド
+                if let BasicValueEnum::StructValue(tuple_val) = value {
+                    for (i, pattern) in patterns.iter().enumerate() {
+                        let element = self.builder.build_extract_value(tuple_val, i as u32, &format!("tuple_elem_{}", i))?;
+                        self.bind_pattern_variables(pattern, element)?;
+                    }
+                }
+                Ok(())
+            }
+            Pattern::Struct(_, field_patterns) => {
+                // 構造体の各フィールドの変数をバインド
+                if let BasicValueEnum::StructValue(struct_val) = value {
+                    for (i, (_, pattern)) in field_patterns.iter().enumerate() {
+                        let field_value = self.builder.build_extract_value(struct_val, i as u32, &format!("field_{}", i))?;
+                        self.bind_pattern_variables(pattern, field_value)?;
+                    }
+                }
                 Ok(())
             }
         }
