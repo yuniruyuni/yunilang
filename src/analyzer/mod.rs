@@ -9,6 +9,7 @@ mod lifetime;
 mod symbol;
 mod tail_position;
 mod type_checker;
+mod type_env;
 
 // 公開API
 pub use semantic_analyzer::SemanticAnalyzer;

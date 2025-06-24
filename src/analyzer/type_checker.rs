@@ -148,9 +148,10 @@ impl TypeChecker {
                 }
                 self.validate_type(&fn_type.return_type, span)?;
             }
-            Type::Variable(_) => {
-                // 型変数は型パラメータとして定義されていることを前提とする
-                // TODO: 型パラメータスコープのチェック
+            Type::Variable(_name) => {
+                // 型変数は型パラメータとして定義されている必要がある
+                // 注: この検証はSemanticAnalyzerのtype_envで行われる
+                // ここでは単にOKとする
             }
             Type::Generic(name, args) => {
                 // ジェネリック型の基本型が存在するかチェック

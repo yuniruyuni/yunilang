@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use super::lifetime::LifetimeContext;
 use super::symbol::{AnalysisError, AnalysisResult, Scope};
 use super::type_checker::TypeChecker;
+use super::type_env::TypeEnvironment;
 
 // サブモジュール
 mod complex_expressions;
@@ -27,6 +28,8 @@ pub struct SemanticAnalyzer {
     pub current_return_type: Option<Type>,
     /// 現在の関数のライフタイムコンテキスト
     pub lifetime_context: LifetimeContext,
+    /// 型パラメータ環境
+    pub type_env: TypeEnvironment,
     /// 収集されたエラー
     pub errors: Vec<AnalysisError>,
 }
@@ -45,6 +48,7 @@ impl SemanticAnalyzer {
             imports: HashMap::new(),
             current_return_type: None,
             lifetime_context: LifetimeContext::new(),
+            type_env: TypeEnvironment::new(),
             errors: Vec::new(),
         }
     }

@@ -16,6 +16,18 @@ impl SemanticAnalyzer {
     pub fn analyze_function(&mut self, func: &FunctionDecl) -> AnalysisResult<()> {
         // 新しいスコープを作成
         self.enter_scope();
+        
+        // 型パラメータを環境に登録
+        self.type_env.enter_scope();
+        if let Err(e) = self.type_env.register_type_params(&func.type_params) {
+            return match e {
+                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                _ => Err(AnalysisError::InvalidOperation {
+                    message: format!("Unexpected error in type parameter registration: {:?}", e),
+                    span: func.span,
+                }),
+            };
+        }
 
         // ライフタイムパラメータを設定
         if let Some(lives_clause) = &func.lives_clause {
@@ -95,6 +107,9 @@ impl SemanticAnalyzer {
 
         self.current_return_type = None;
         self.exit_scope();
+        
+        // 型パラメータのスコープを終了
+        self.type_env.exit_scope();
 
         Ok(())
     }
@@ -103,6 +118,18 @@ impl SemanticAnalyzer {
     pub fn analyze_method(&mut self, method: &MethodDecl) -> AnalysisResult<()> {
         // 新しいスコープを作成
         self.enter_scope();
+        
+        // 型パラメータを環境に登録
+        self.type_env.enter_scope();
+        if let Err(e) = self.type_env.register_type_params(&method.type_params) {
+            return match e {
+                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                _ => Err(AnalysisError::InvalidOperation {
+                    message: format!("Unexpected error in type parameter registration: {:?}", e),
+                    span: method.span,
+                }),
+            };
+        }
 
         // ライフタイムパラメータを設定
         if let Some(lives_clause) = &method.lives_clause {
@@ -194,6 +221,9 @@ impl SemanticAnalyzer {
 
         self.current_return_type = None;
         self.exit_scope();
+        
+        // 型パラメータのスコープを終了
+        self.type_env.exit_scope();
 
         Ok(())
     }

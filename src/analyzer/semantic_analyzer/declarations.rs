@@ -17,6 +17,18 @@ impl SemanticAnalyzer {
 
     /// 構造体定義を収集
     pub fn collect_struct_definition(&mut self, struct_def: &StructDef) -> AnalysisResult<()> {
+        // 型パラメータを環境に登録
+        self.type_env.enter_scope();
+        if let Err(e) = self.type_env.register_type_params(&struct_def.type_params) {
+            return match e {
+                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                _ => Err(AnalysisError::InvalidOperation {
+                    message: format!("Unexpected error in type parameter registration: {:?}", e),
+                    span: struct_def.span,
+                }),
+            };
+        }
+        
         // フィールドの型を検証
         for field in &struct_def.fields {
             self.type_checker.validate_type(&field.ty, field.span)?;
@@ -32,11 +44,26 @@ impl SemanticAnalyzer {
         // type_checkerとscopeの両方に登録
         self.type_checker.register_type(type_info.clone())?;
         self.scope_stack.last_mut().unwrap().define_type(type_info)?;
+        
+        // 型パラメータのスコープを終了
+        self.type_env.exit_scope();
         Ok(())
     }
 
     /// Enum定義を収集
     pub fn collect_enum_definition(&mut self, enum_def: &EnumDef) -> AnalysisResult<()> {
+        // 型パラメータを環境に登録
+        self.type_env.enter_scope();
+        if let Err(e) = self.type_env.register_type_params(&enum_def.type_params) {
+            return match e {
+                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                _ => Err(AnalysisError::InvalidOperation {
+                    message: format!("Unexpected error in type parameter registration: {:?}", e),
+                    span: enum_def.span,
+                }),
+            };
+        }
+        
         // バリアントのフィールド型を検証
         for variant in &enum_def.variants {
             for field in &variant.fields {
@@ -54,11 +81,26 @@ impl SemanticAnalyzer {
         // type_checkerとscopeの両方に登録
         self.type_checker.register_type(type_info.clone())?;
         self.scope_stack.last_mut().unwrap().define_type(type_info)?;
+        
+        // 型パラメータのスコープを終了
+        self.type_env.exit_scope();
         Ok(())
     }
 
     /// 関数シグネチャを収集
     pub fn collect_function_signature(&mut self, func: &FunctionDecl) -> AnalysisResult<()> {
+        // 型パラメータを環境に登録
+        self.type_env.enter_scope();
+        if let Err(e) = self.type_env.register_type_params(&func.type_params) {
+            return match e {
+                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                _ => Err(AnalysisError::InvalidOperation {
+                    message: format!("Unexpected error in type parameter registration: {:?}", e),
+                    span: func.span,
+                }),
+            };
+        }
+        
         // パラメータの型を検証
         for param in &func.params {
             self.type_checker.validate_type(&param.ty, param.span)?;
@@ -83,11 +125,26 @@ impl SemanticAnalyzer {
         // グローバルスコープに関数を登録
         // TypeCheckerに関数シグネチャを登録
         self.type_checker.register_function(signature)?;
+        
+        // 型パラメータのスコープを終了
+        self.type_env.exit_scope();
         Ok(())
     }
 
     /// メソッドシグネチャを収集
     pub fn collect_method_signature(&mut self, method: &MethodDecl) -> AnalysisResult<()> {
+        // 型パラメータを環境に登録
+        self.type_env.enter_scope();
+        if let Err(e) = self.type_env.register_type_params(&method.type_params) {
+            return match e {
+                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                _ => Err(AnalysisError::InvalidOperation {
+                    message: format!("Unexpected error in type parameter registration: {:?}", e),
+                    span: method.span,
+                }),
+            };
+        }
+        
         // レシーバー型が定義されているか確認
         self.type_checker.validate_type(&method.receiver.ty, method.span)?;
 
@@ -136,6 +193,9 @@ impl SemanticAnalyzer {
 
         // TypeCheckerにメソッドを登録
         self.type_checker.register_method(&receiver_name, signature)?;
+        
+        // 型パラメータのスコープを終了
+        self.type_env.exit_scope();
         Ok(())
     }
 }
