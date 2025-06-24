@@ -3,7 +3,7 @@
 //! このモジュールは、コンパイルパイプライン全体を管理し、
 //! 複数のエラーを蓄積しながら処理を進める機能を提供します。
 
-use crate::analyzer::SemanticAnalyzer;
+use crate::analyzer::{SemanticAnalyzer, monomorphize_program};
 use crate::codegen::CodeGenerator;
 use crate::error::{
     ErrorCollector, LexerError, YuniError, YuniResult,
@@ -176,6 +176,21 @@ impl<'ctx> CompilationPipeline<'ctx> {
             true
         }
     }
+    
+    /// 単相化を実行
+    pub fn monomorphize(&mut self, ast: crate::ast::Program) -> Option<crate::ast::Program> {
+        if self.verbose {
+            println!("ステップ: ジェネリクスの単相化を開始");
+        }
+        
+        match monomorphize_program(ast) {
+            Ok(monomorphized_ast) => Some(monomorphized_ast),
+            Err(e) => {
+                self.state.add_error(e);
+                None
+            }
+        }
+    }
 
     /// コード生成を実行
     pub fn codegen(&mut self, ast: &crate::ast::Program) -> YuniResult<CodeGenerator<'ctx>> {
@@ -229,8 +244,15 @@ impl<'ctx> CompilationPipeline<'ctx> {
             return Ok(None);
         }
 
+        // 単相化を実行
+        let monomorphized_ast = if let Some(ast) = ast {
+            self.monomorphize(ast)
+        } else {
+            None
+        };
+
         // コード生成
-        if let Some(ast) = ast {
+        if let Some(ast) = monomorphized_ast {
             let codegen = self.codegen(&ast)?;
             Ok(Some(codegen))
         } else {

@@ -207,8 +207,15 @@ fn compile(opts: CompileOptions) -> YuniResult<()> {
         return Err(YuniError::Other("Compilation failed".to_string()));
     }
 
+    // 単相化を実行
+    let monomorphized_ast = if let Some(ast) = ast {
+        pipeline.monomorphize(ast)
+    } else {
+        None
+    };
+
     // コード生成
-    let codegen = if let Some(ast) = ast {
+    let codegen = if let Some(ast) = monomorphized_ast {
         pipeline.codegen(&ast)?
     } else {
         return Err(YuniError::Other("No AST generated".to_string()));
