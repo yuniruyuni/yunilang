@@ -148,7 +148,7 @@ impl TypeChecker {
                 }
                 self.validate_type(&fn_type.return_type, span)?;
             }
-            Type::TypeVariable(_) => {
+            Type::Variable(_) => {
                 // 型変数は型パラメータとして定義されていることを前提とする
                 // TODO: 型パラメータスコープのチェック
             }
@@ -211,7 +211,7 @@ impl TypeChecker {
                 let param_strs: Vec<String> = fn_type.params.iter().map(|p| self.type_to_string(p)).collect();
                 format!("fn({}) -> {}", param_strs.join(", "), self.type_to_string(&fn_type.return_type))
             }
-            Type::TypeVariable(name) => name.clone(),
+            Type::Variable(name) => name.clone(),
             Type::Generic(name, args) => {
                 let arg_strs: Vec<String> = args.iter().map(|a| self.type_to_string(a)).collect();
                 format!("{}<{}>", name, arg_strs.join(", "))

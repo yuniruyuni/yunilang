@@ -33,10 +33,10 @@ struct Vec<T> {
         assert_eq!(struct_def.fields.len(), 2);
         assert_eq!(struct_def.fields[0].name, "data");
         if let Type::Array(elem_type) = &struct_def.fields[0].ty {
-            if let Type::TypeVariable(name) = elem_type.as_ref() {
+            if let Type::Variable(name) = elem_type.as_ref() {
                 assert_eq!(name, "T");
             } else {
-                panic!("Expected TypeVariable, got {:?}", elem_type);
+                panic!("Expected Variable, got {:?}", elem_type);
             }
         } else {
             panic!("Expected Array type, got {:?}", struct_def.fields[0].ty);
@@ -73,18 +73,18 @@ fn identity<T>(x: T): T {
         // パラメータの型をチェック
         assert_eq!(func_decl.params.len(), 1);
         assert_eq!(func_decl.params[0].name, "x");
-        if let Type::TypeVariable(name) = &func_decl.params[0].ty {
+        if let Type::Variable(name) = &func_decl.params[0].ty {
             assert_eq!(name, "T");
         } else {
-            panic!("Expected TypeVariable, got {:?}", func_decl.params[0].ty);
+            panic!("Expected Variable, got {:?}", func_decl.params[0].ty);
         }
         
         // 戻り値の型をチェック
         if let Some(return_type) = &func_decl.return_type {
-            if let Type::TypeVariable(name) = return_type.as_ref() {
+            if let Type::Variable(name) = return_type.as_ref() {
                 assert_eq!(name, "T");
             } else {
-                panic!("Expected TypeVariable, got {:?}", return_type);
+                panic!("Expected Variable, got {:?}", return_type);
             }
         } else {
             panic!("Expected return type");
@@ -176,10 +176,10 @@ struct HashMap<K, V> {
         // keysフィールド
         assert_eq!(struct_def.fields[0].name, "keys");
         if let Type::Array(elem_type) = &struct_def.fields[0].ty {
-            if let Type::TypeVariable(name) = elem_type.as_ref() {
+            if let Type::Variable(name) = elem_type.as_ref() {
                 assert_eq!(name, "K");
             } else {
-                panic!("Expected TypeVariable K, got {:?}", elem_type);
+                panic!("Expected Variable K, got {:?}", elem_type);
             }
         } else {
             panic!("Expected Array type, got {:?}", struct_def.fields[0].ty);
@@ -188,10 +188,10 @@ struct HashMap<K, V> {
         // valuesフィールド
         assert_eq!(struct_def.fields[1].name, "values");
         if let Type::Array(elem_type) = &struct_def.fields[1].ty {
-            if let Type::TypeVariable(name) = elem_type.as_ref() {
+            if let Type::Variable(name) = elem_type.as_ref() {
                 assert_eq!(name, "V");
             } else {
-                panic!("Expected TypeVariable V, got {:?}", elem_type);
+                panic!("Expected Variable V, got {:?}", elem_type);
             }
         } else {
             panic!("Expected Array type, got {:?}", struct_def.fields[1].ty);

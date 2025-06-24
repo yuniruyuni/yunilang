@@ -162,7 +162,7 @@ impl Parser {
                 } else {
                     // 単一の大文字で始まる識別子は型変数として扱う
                     if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
-                        Ok(Type::TypeVariable(name))
+                        Ok(Type::Variable(name))
                     } else {
                         Ok(Type::UserDefined(name))
                     }

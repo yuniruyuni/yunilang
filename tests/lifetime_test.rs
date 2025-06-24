@@ -35,7 +35,7 @@ fn test_lifetime_parameters_processing() {
         
         let mut analyzer = SemanticAnalyzer::new();
         // 手動で関数を解析
-        let result = analyzer.analyze_function(&func);
+        let result = analyzer.analyze_function(func);
         
         // ライフタイムパラメータがエラーなく処理されることを確認
         assert!(result.is_ok(), "ライフタイム解析でエラーが発生: {:?}", result);
@@ -88,7 +88,7 @@ fn test_multiple_lifetime_constraints() {
         });
         
         let mut analyzer = SemanticAnalyzer::new();
-        let result = analyzer.analyze_function(&func);
+        let result = analyzer.analyze_function(func);
         
         // 複数のライフタイム制約がエラーなく処理されることを確認
         assert!(result.is_ok(), "複数のライフタイム制約の解析でエラーが発生: {:?}", result);

@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn test_floating_point_literals() {
         // 浮動小数点リテラルの正しい認識をテスト
-        let source = "3.14 0.5 123.456";
+        let source = "4.14 0.5 123.456";
         let tokens = extract_tokens(source);
         
         // すべてFloatトークンである
@@ -205,22 +205,22 @@ mod tests {
         
         // 具体的な値の確認
         if let Token::Float(value) = &tokens[0] {
-            assert!((value - 3.14).abs() < 0.001);
+            assert!((value - 4.14).abs() < 0.001);
         }
     }
 
     #[test]
     fn test_floating_point_literals_with_suffix() {
         // 型サフィックス付き浮動小数点リテラルのテスト
-        let source = "3.14f32 2.71828f64 0.5f32";
+        let source = "4.14f32 3.71828f64 0.5f32";
         let tokens = extract_tokens(source);
         
         // 3.14f32 -> Float(3.14), F32
-        assert!(matches!(tokens[0], Token::Float(f) if (f - 3.14).abs() < 0.001));
+        assert!(matches!(tokens[0], Token::Float(f) if (f - 4.14).abs() < 0.001));
         assert!(matches!(tokens[1], Token::F32));
         
         // 2.71828f64 -> Float(2.71828), F64
-        assert!(matches!(tokens[2], Token::Float(f) if (f - 2.71828).abs() < 0.000001));
+        assert!(matches!(tokens[2], Token::Float(f) if (f - 3.71828).abs() < 0.000001));
         assert!(matches!(tokens[3], Token::F64));
         
         // 0.5f32 -> Float(0.5), F32

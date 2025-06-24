@@ -1105,8 +1105,8 @@ impl fn private_method(p: &Point) {
         package main
         
         fn main() {
-            let a = 3.14f32;
-            let b = 2.71828f64;
+            let a = 4.14f32;
+            let b = 3.71828f64;
             let c = 0.5f32;
         }
         "#;
@@ -1119,7 +1119,7 @@ impl fn private_method(p: &Point) {
             // 3.14f32
             if let Statement::Let(ref let_stmt) = func.body.statements[0] {
                 if let Some(Expression::Float(ref float_lit)) = &let_stmt.init {
-                    assert!((float_lit.value - 3.14).abs() < 0.001);
+                    assert!((float_lit.value - 4.14).abs() < 0.001);
                     assert_eq!(float_lit.suffix, Some("f32".to_string()));
                 } else {
                     panic!("Expected float literal");
@@ -1129,7 +1129,7 @@ impl fn private_method(p: &Point) {
             // 2.71828f64
             if let Statement::Let(ref let_stmt) = func.body.statements[1] {
                 if let Some(Expression::Float(ref float_lit)) = &let_stmt.init {
-                    assert!((float_lit.value - 2.71828).abs() < 0.000001);
+                    assert!((float_lit.value - 3.71828).abs() < 0.000001);
                     assert_eq!(float_lit.suffix, Some("f64".to_string()));
                 } else {
                     panic!("Expected float literal");

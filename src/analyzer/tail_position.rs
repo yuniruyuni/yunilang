@@ -10,6 +10,7 @@ pub struct TailPositionAnalyzer {
     current_function: Option<String>,
 }
 
+#[allow(dead_code)]
 impl TailPositionAnalyzer {
     /// 新しい末尾位置解析器を作成
     pub fn new() -> Self {
