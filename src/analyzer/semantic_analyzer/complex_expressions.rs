@@ -36,6 +36,9 @@ impl SemanticAnalyzer {
             }
         }
         
+        // 網羅性チェック
+        self.check_match_exhaustiveness(match_expr, &expr_type)?;
+        
         Ok(expected_type)
     }
     
@@ -276,5 +279,77 @@ impl SemanticAnalyzer {
         
         self.exit_scope();
         Ok(result_type)
+    }
+    
+    /// match式の網羅性をチェック
+    pub fn check_match_exhaustiveness(&self, match_expr: &MatchExpr, expr_type: &Type) -> AnalysisResult<()> {
+        // ワイルドカードパターンまたは識別子パターンがある場合は網羅的
+        for arm in &match_expr.arms {
+            match &arm.pattern {
+                Pattern::Wildcard => return Ok(()),
+                Pattern::Identifier(_, _) => return Ok(()),
+                _ => {}
+            }
+        }
+        
+        // 型に応じた網羅性チェック
+        match expr_type {
+            Type::Bool => {
+                // bool型の場合、trueとfalseの両方をカバーしているかチェック
+                let mut has_true = false;
+                let mut has_false = false;
+                
+                for arm in &match_expr.arms {
+                    if let Pattern::Literal(LiteralPattern::Bool(value)) = &arm.pattern {
+                        if *value {
+                            has_true = true;
+                        } else {
+                            has_false = true;
+                        }
+                    }
+                }
+                
+                if !has_true || !has_false {
+                    return Err(AnalysisError::NonExhaustiveMatch {
+                        span: match_expr.span,
+                    });
+                }
+            }
+            Type::UserDefined(type_name) => {
+                // enum型の場合、すべてのバリアントをカバーしているかチェック
+                if let Some(type_info) = self.lookup_type(type_name) {
+                    if let TypeKind::Enum(variants) = &type_info.kind {
+                        use std::collections::HashSet;
+                        let mut covered_variants = HashSet::new();
+                        
+                        for arm in &match_expr.arms {
+                            if let Pattern::EnumVariant { enum_name, variant, .. } = &arm.pattern {
+                                if enum_name == type_name {
+                                    covered_variants.insert(variant.clone());
+                                }
+                            }
+                        }
+                        
+                        // すべてのバリアントがカバーされているかチェック
+                        for variant in variants {
+                            if !covered_variants.contains(&variant.name) {
+                                return Err(AnalysisError::NonExhaustiveMatch {
+                                    span: match_expr.span,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                // その他の型の場合、ワイルドカードパターンか識別子パターンが必要
+                // （すでに上でチェック済み）
+                return Err(AnalysisError::NonExhaustiveMatch {
+                    span: match_expr.span,
+                });
+            }
+        }
+        
+        Ok(())
     }
 }

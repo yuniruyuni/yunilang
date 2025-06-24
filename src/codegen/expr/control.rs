@@ -2,7 +2,7 @@
 
 use crate::ast::*;
 use crate::error::{CodegenError, YuniError, YuniResult};
-use inkwell::values::{BasicValueEnum, BasicValue};
+use inkwell::values::BasicValueEnum;
 use inkwell::IntPredicate;
 
 use crate::codegen::code_generator::CodeGenerator;
@@ -114,10 +114,23 @@ impl<'ctx> CodeGenerator<'ctx> {
         
         // エンドブロック（すべてのパターンがマッチしなかった場合）
         self.builder.position_at_end(end_block);
-        // パニックまたはデフォルト値を返す（ここではunit値を返す）
+        
+        // パニックメッセージを生成
+        let panic_msg = "パターンマッチが網羅的ではありません";
+        let panic_str = self.builder.build_global_string_ptr(panic_msg, "panic_msg")?.as_pointer_value();
+        
+        // yuni_panic関数を呼び出し
+        let panic_fn = self.runtime_manager.get_function("yuni_panic")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Undefined {
+                name: "yuni_panic".to_string(),
+                span: match_expr.span,
+            }))?;
+        
+        self.builder.build_call(panic_fn, &[panic_str.into()], "panic_call")?;
+        self.builder.build_unreachable()?;
+        
+        // unit値を返す（実際には到達しないが、型システムのために必要）
         let unit_value = self.context.i32_type().const_zero();
-        self.builder.build_unconditional_branch(merge_block)?;
-        let end_block = self.builder.get_insert_block().unwrap();
         
         // マージブロックでPHIノードを作成
         self.builder.position_at_end(merge_block);
@@ -147,9 +160,6 @@ impl<'ctx> CodeGenerator<'ctx> {
                 for (result, block) in arm_results.iter().zip(arm_result_blocks.iter()) {
                     phi.add_incoming(&[(result, *block)]);
                 }
-                
-                // エンドブロックからの場合はunit値を追加
-                phi.add_incoming(&[(&unit_value.as_basic_value_enum(), end_block)]);
                 
                 Ok(phi.as_basic_value())
             }

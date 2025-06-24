@@ -6,20 +6,12 @@ use crate::ast::*;
 use std::collections::HashSet;
 
 /// 末尾位置コンテキスト
+#[derive(Default)]
 pub struct TailContext {
     /// 現在の関数名
     pub current_function: Option<String>,
     /// 末尾位置にある呼び出しのセット（式のアドレスで識別）
     pub tail_calls: HashSet<usize>,
-}
-
-impl Default for TailContext {
-    fn default() -> Self {
-        Self {
-            current_function: None,
-            tail_calls: HashSet::new(),
-        }
-    }
 }
 
 impl TailContext {
