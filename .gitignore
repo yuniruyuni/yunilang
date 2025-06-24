@@ -80,27 +80,21 @@ lcov.info
 *.yuni.tokens
 .yuni/
 
-# Yuni compiled executables (without extension on Unix)
-# Ignore all files without extension in examples directory (likely executables)
+# Yuni compiled executables and build artifacts
+# Allow only source files and documentation in examples/
 examples/*
+!examples/
 !examples/*.yuni
+!examples/*.rs
 !examples/*.md
 !examples/*.txt
+!examples/README*
 
-# Ignore compiled executables in root directory
-/hello
-/hello_*
-/test_*
-/math_*
-/simple_*
-/generic_*
-/go_style_*
-/template_*
-/control_*
-/println_*
-/arithmetic_*
-# Generic pattern for executables without extension (be careful with this)
-# Note: This might need adjustment based on your workflow
+# Ignore executables without extension in root directory
+# (Compiled Yuni programs typically have no extension on Unix)
+# Match files without any dots (no extension) in their name
+/[!.]*
+!/*/
 
 # Build artifacts that shouldn't be tracked
 runtime.o
