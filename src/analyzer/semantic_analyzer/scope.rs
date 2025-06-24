@@ -38,7 +38,6 @@ impl SemanticAnalyzer {
         self.lifetime_context.exit_scope();
     }
     
-    #[allow(dead_code)]
     pub fn get_statement_span(&self, stmt: &Statement) -> Span {
         match stmt {
             Statement::Let(s) => s.span,

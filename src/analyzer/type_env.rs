@@ -128,8 +128,8 @@ impl TypeEnvironment {
         vars
     }
     
-    #[allow(dead_code)]
     #[allow(clippy::only_used_in_recursion)]
+    #[allow(dead_code)]
     fn collect_type_variables_impl(&self, ty: &Type, vars: &mut HashSet<String>) {
         match ty {
             Type::Variable(name) => {

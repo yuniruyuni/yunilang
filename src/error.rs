@@ -75,7 +75,6 @@ pub enum ParserError {
 
 /// セマンティック解析エラーの詳細
 #[derive(Error, Debug, Clone)]
-#[allow(dead_code)]
 pub enum AnalyzerError {
     #[error("未定義の変数: {name}")]
     UndefinedVariable { name: String, span: Span },
@@ -139,6 +138,7 @@ pub enum AnalyzerError {
     MethodNotFound { method: String, ty: String, span: Span },
     
     #[error("一時的な値の参照を取得することはできません")]
+    #[allow(dead_code)]
     TemporaryReference { span: Span },
     
     #[error("到達不能コード")]

@@ -9,30 +9,33 @@ pub type AnalysisResult<T> = Result<T, AnalysisError>;
 
 /// シンボル情報
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Symbol {
     pub name: String,
     pub ty: Type,
     pub is_mutable: bool,
     pub span: Span,
     /// 変数が借用されているかどうか
+    #[allow(dead_code)]
     pub borrow_info: Option<BorrowInfo>,
     /// 変数が移動されたかどうか
     pub is_moved: bool,
     /// 変数のライフタイム（参照の場合）
+    #[allow(dead_code)]
     pub lifetime: Option<LifetimeId>,
 }
 
 /// 関数シグネチャ情報
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct FunctionSignature {
     pub name: String,
     pub type_params: Vec<TypeParam>,
     pub params: Vec<(String, Type)>,
     pub return_type: Type,
+    #[allow(dead_code)]
     pub lives_clause: Option<LivesClause>,
+    #[allow(dead_code)]
     pub is_method: bool,
+    #[allow(dead_code)]
     pub receiver_type: Option<Type>,
     pub span: Span,
 }
@@ -57,7 +60,6 @@ pub enum TypeKind {
 
 /// ライフタイムID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[allow(dead_code)]
 pub enum LifetimeId {
     Static,
     Named(usize),
@@ -125,7 +127,6 @@ impl Scope {
         }
     }
 
-    #[allow(dead_code)]
     pub fn mark_moved(&mut self, name: &str) -> AnalysisResult<()> {
         match self.lookup_mut(name) {
             Some(symbol) => {
@@ -139,7 +140,6 @@ impl Scope {
         }
     }
 
-    #[allow(dead_code)]
     pub fn mark_borrowed(&mut self, name: &str, borrow_info: BorrowInfo) -> AnalysisResult<()> {
         match self.lookup_mut(name) {
             Some(symbol) => {

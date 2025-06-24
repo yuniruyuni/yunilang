@@ -71,7 +71,6 @@ pub enum LivesConstraint {
 
 /// ライフタイム分析のコンテキスト
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct LifetimeContext {
     /// 全てのライフタイム
     pub lifetimes: HashMap<LifetimeId, Lifetime>,
@@ -91,7 +90,6 @@ pub struct LifetimeContext {
     pub variable_usage: HashMap<String, Vec<VariableUsage>>,
 }
 
-#[allow(dead_code)]
 impl Default for LifetimeContext {
     fn default() -> Self {
         let mut ctx = Self {
@@ -112,7 +110,6 @@ impl Default for LifetimeContext {
     }
 }
 
-#[allow(dead_code)]
 impl LifetimeContext {
     pub fn new() -> Self {
         Self::default()
