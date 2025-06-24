@@ -30,7 +30,6 @@ fn main() {
 }
 
 #[test]
-#[ignore = "Monomorphization not yet implemented"]
 fn test_generic_function_monomorphization() {
     // 将来的に実装される予定のテスト
     let input = r#"
@@ -61,7 +60,6 @@ fn main() {
 }
 
 #[test]
-#[ignore = "Monomorphization not yet implemented"]
 fn test_generic_struct_monomorphization() {
     // 将来的に実装される予定のテスト
     let input = r#"

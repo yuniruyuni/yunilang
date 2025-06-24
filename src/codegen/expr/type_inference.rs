@@ -18,9 +18,22 @@ impl<'ctx> CodeGenerator<'ctx> {
                         message: "Runtime function yuni_int_to_string not found".to_string(),
                     }))?;
                 
+                // yuni_int_to_string は i64 を期待するので、必要に応じて拡張
+                let i64_type = self.context.i64_type();
+                let int_val_as_i64 = if int_val.get_type().get_bit_width() < 64 {
+                    // 符号付き拡張（i8, i16, i32 -> i64）
+                    self.builder.build_int_s_extend(int_val, i64_type, "sext_to_i64")?
+                } else if int_val.get_type().get_bit_width() > 64 {
+                    // 切り詰め（i128 -> i64）
+                    self.builder.build_int_truncate(int_val, i64_type, "trunc_to_i64")?
+                } else {
+                    // 既に i64
+                    int_val
+                };
+                
                 let result = self.builder.build_call(
                     to_string_fn,
-                    &[int_val.into()],
+                    &[int_val_as_i64.into()],
                     "int_to_string_result",
                 )?.try_as_basic_value().left()
                     .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {

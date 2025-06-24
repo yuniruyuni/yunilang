@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::Span;
 
 /// 型の表現
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Type {
     // 基本型
     I8,
@@ -46,7 +46,7 @@ pub enum Type {
 }
 
 /// 関数型
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Box<Type>,

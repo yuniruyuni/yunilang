@@ -97,8 +97,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(self.context.i32_type().const_zero().into());
         }
 
-        // 最初の引数をフォーマット文字列として使用
-        let format_arg = self.compile_expression(&args[0])?;
+        // 最初の引数をコンパイルして、文字列に変換
+        let arg_value = self.compile_expression(&args[0])?;
+        let format_arg = self.value_to_string(arg_value)?;
         
         if args.len() == 1 {
             // 引数が1つの場合
@@ -117,19 +118,57 @@ impl<'ctx> CodeGenerator<'ctx> {
             let format_ptr = format_global.as_pointer_value();
             self.builder.build_call(printf_fn, &[format_ptr.into(), format_arg.into()], "println_call")?;
         } else {
-            // 複数の引数がある場合（簡易実装）
+            // 複数の引数がある場合 - すべての値を文字列として連結して出力
             let printf_fn = self.runtime_manager.get_function("printf")
                 .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                     message: "printf function not found".to_string(),
                 }))?;
 
-            let mut printf_args = vec![format_arg.into()];
+            // すべての引数を文字列に変換して連結
+            let mut result_str = format_arg;
             for arg in args.iter().skip(1) {
                 let arg_value = self.compile_expression(arg)?;
-                printf_args.push(arg_value.into());
+                let arg_str = self.value_to_string(arg_value)?;
+                
+                // 文字列連結
+                let concat_fn = self.runtime_manager.get_function("yuni_string_concat")
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: "yuni_string_concat function not found".to_string(),
+                    }))?;
+                
+                result_str = self.builder.build_call(
+                    concat_fn, 
+                    &[result_str.into(), arg_str.into()], 
+                    "concat_result"
+                )?.try_as_basic_value().left().unwrap();
             }
 
-            self.builder.build_call(printf_fn, &printf_args, "println_call")?;
+            // 改行を追加
+            let newline_str = self.context.const_string(b"\n", true);
+            let newline_global = self.module.add_global(newline_str.get_type(), None, "newline");
+            newline_global.set_initializer(&newline_str);
+            newline_global.set_constant(true);
+            let newline_ptr = newline_global.as_pointer_value();
+            
+            let concat_fn = self.runtime_manager.get_function("yuni_string_concat")
+                .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                    message: "yuni_string_concat function not found".to_string(),
+                }))?;
+            
+            result_str = self.builder.build_call(
+                concat_fn, 
+                &[result_str.into(), newline_ptr.into()], 
+                "concat_newline"
+            )?.try_as_basic_value().left().unwrap();
+
+            // %s形式で出力
+            let format_str = self.context.const_string(b"%s", true);
+            let format_global = self.module.add_global(format_str.get_type(), None, "printf_format");
+            format_global.set_initializer(&format_str);
+            format_global.set_constant(true);
+
+            let format_ptr = format_global.as_pointer_value();
+            self.builder.build_call(printf_fn, &[format_ptr.into(), result_str.into()], "println_call")?;
         }
 
         Ok(self.context.i32_type().const_zero().into())

@@ -1,0 +1,20 @@
+package main
+
+// ジェネリック構造体の例
+struct Box<T> {
+    value: T
+}
+
+fn main() {
+    // 整数のBox
+    let int_box = Box { value: 42 };
+    println("Box<i32> value: ", int_box.value);
+    
+    // 文字列のBox
+    let str_box = Box { value: "Hello" };
+    println("Box<string> value: ", str_box.value);
+    
+    // 浮動小数点のBox
+    let float_box = Box { value: 3.14 };
+    println("Box<f64> value: ", float_box.value);
+}

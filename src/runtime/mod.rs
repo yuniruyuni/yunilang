@@ -125,6 +125,12 @@ pub unsafe extern "C" fn yuni_str_len(s: *const c_char) -> usize {
     c_str.to_bytes().len()
 }
 
+/// Convert integer to string (alias for compatibility)
+#[no_mangle]
+pub extern "C" fn yuni_int_to_string(n: i64) -> *mut c_char {
+    yuni_i64_to_string(n)
+}
+
 /// Convert integer to string
 #[no_mangle]
 pub extern "C" fn yuni_i64_to_string(n: i64) -> *mut c_char {
@@ -134,6 +140,12 @@ pub extern "C" fn yuni_i64_to_string(n: i64) -> *mut c_char {
     } else {
         std::ptr::null_mut()
     }
+}
+
+/// Convert float to string (alias for compatibility)
+#[no_mangle]
+pub extern "C" fn yuni_float_to_string(n: f64) -> *mut c_char {
+    yuni_f64_to_string(n)
 }
 
 /// Convert float to string
@@ -155,6 +167,32 @@ pub extern "C" fn yuni_bool_to_string(b: bool) -> *mut c_char {
         c_string.into_raw()
     } else {
         std::ptr::null_mut()
+    }
+}
+
+/// Allocate string with given size
+#[no_mangle]
+pub extern "C" fn yuni_alloc_string(size: i64) -> *mut c_char {
+    if size <= 0 {
+        return std::ptr::null_mut();
+    }
+    let mut vec = Vec::<u8>::with_capacity(size as usize + 1); // +1 for null terminator
+    vec.resize(size as usize + 1, 0);
+    let ptr = vec.as_mut_ptr() as *mut c_char;
+    std::mem::forget(vec);
+    ptr
+}
+
+/// Free allocated string
+/// 
+/// # Safety
+/// `s`は`yuni_alloc_string`で割り当てられたポインタである必要があります。
+#[no_mangle]
+pub unsafe extern "C" fn yuni_free_string(s: *mut c_char) {
+    if !s.is_null() {
+        // SAFETY: 呼び出し側がyuni_alloc_stringで割り当てられたポインタを
+        // 提供することを前提とする
+        let _ = CString::from_raw(s);
     }
 }
 
