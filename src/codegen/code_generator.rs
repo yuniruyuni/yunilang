@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use super::runtime::RuntimeManager;
 use super::symbol_table::{ScopeManager, StructInfo};
+use super::tail_call::TailContext;
 use super::types::TypeManager;
 
 /// メインコード生成器構造体
@@ -46,6 +47,8 @@ pub struct CodeGenerator<'ctx> {
     pub current_function: Option<FunctionValue<'ctx>>,
     // 現在の関数の戻り値型（型推論用）
     pub current_return_type: Option<Type>,
+    // 末尾呼び出しコンテキスト
+    pub tail_context: TailContext,
 }
 
 impl<'ctx> CodeGenerator<'ctx> {
@@ -83,6 +86,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             enum_variants: HashMap::new(),
             current_function: None,
             current_return_type: None,
+            tail_context: TailContext::new(),
         }
     }
     
@@ -241,6 +245,9 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         self.current_function = Some(function);
         self.current_return_type = func.return_type.as_ref().map(|t| (**t).clone());
+        
+        // 末尾位置解析を実行
+        self.tail_context.analyze_function(func);
 
         // エントリブロックを作成
         let entry = self.context.append_basic_block(function, "entry");

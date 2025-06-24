@@ -63,9 +63,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
 
         // 関数呼び出し
-        let call_result = self.builder.build_call(func, &args, "call_result")?;
+        let call_site = self.builder.build_call(func, &args, "call_result")?;
         
-        if let Some(value) = call_result.try_as_basic_value().left() {
+        // 末尾呼び出し最適化を適用
+        if self.tail_context.is_tail_call(call) {
+            call_site.set_tail_call(true);
+        }
+        
+        if let Some(value) = call_site.try_as_basic_value().left() {
             Ok(value)
         } else {
             // void関数の場合、unit値を返す

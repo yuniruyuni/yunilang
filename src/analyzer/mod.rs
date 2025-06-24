@@ -7,6 +7,7 @@ pub mod semantic_analyzer;
 mod borrow_checker;
 mod lifetime;
 mod symbol;
+mod tail_position;
 mod type_checker;
 
 // 公開API

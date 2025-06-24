@@ -7,6 +7,7 @@ mod expr;
 mod runtime;
 mod stmt_codegen;
 mod symbol_table;
+mod tail_call;
 mod types;
 
 // 公開API

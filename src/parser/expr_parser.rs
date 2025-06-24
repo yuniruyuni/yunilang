@@ -355,6 +355,7 @@ impl Parser {
                         callee: Box::new(expr),
                         args,
                         span,
+                        is_tail: false,
                     });
                 }
                 _ => break,

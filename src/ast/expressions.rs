@@ -145,6 +145,8 @@ pub struct CallExpr {
     pub callee: Box<Expression>,
     pub args: Vec<Expression>,
     pub span: Span,
+    #[serde(default)]
+    pub is_tail: bool,  // 末尾呼び出しかどうか
 }
 
 /// メソッド呼び出し式
