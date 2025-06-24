@@ -85,7 +85,7 @@ The compiler follows a traditional multi-stage pipeline:
 2. **Parsing**: Tokens → AST (with position tracking for diagnostics)
 3. **Semantic Analysis**: AST validation, type checking, ownership analysis
 4. **Code Generation**: AST → LLVM IR using inkwell
-5. **Linking**: LLVM IR + runtime.c → executable (via clang)
+5. **Linking**: LLVM IR → executable (via clang)
 
 ## Dependencies
 
@@ -111,7 +111,7 @@ Test pattern: Lex → Parse → Analyze → CodeGen for various language feature
 
 ## Important Notes
 
-- The runtime is implemented in C (`src/runtime.c`) and linked with generated code
+- The runtime is implemented in Rust (`src/runtime/mod.rs`) with FFI functions for LLVM
 - Error reporting uses codespan for beautiful diagnostics with source code context
 - The compiler supports multiple output formats: executable, LLVM IR, object files, assembly
 - Optimization levels 0-3 are supported and passed through to LLVM

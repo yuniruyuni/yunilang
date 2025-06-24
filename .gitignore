@@ -90,9 +90,3 @@ examples/*
 !examples/*.txt
 !examples/README*
 
-# Build artifacts that shouldn't be tracked
-runtime.o
-runtime.c
-build_and_run.sh
-EXECUTABLE_BUILD.md
-main_wrapper.c
