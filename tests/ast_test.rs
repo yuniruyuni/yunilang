@@ -328,12 +328,12 @@ mod tests {
         let source = r#"
         package test
         
-        struct Point {
+        type Point struct {
             x: f64,
             y: f64,
         }
         
-        struct Empty {
+        type Empty struct {
         }
         
         fn main() {
@@ -373,13 +373,13 @@ mod tests {
         let source = r#"
         package test
         
-        enum Color {
+        type Color enum {
             Red,
             Green,
             Blue,
         }
         
-        enum Option {
+        type Option enum {
             Some { value: i32 },
             None,
         }
@@ -556,7 +556,7 @@ mod tests {
         let source = r#"
         package test
         
-        struct Point {
+        type Point struct {
             x: f64,
             y: f64,
         }

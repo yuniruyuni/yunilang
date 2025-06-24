@@ -93,6 +93,7 @@ impl Monomorphizer {
                 Item::Function(func) => func.type_params.is_empty(),
                 Item::TypeDef(TypeDef::Struct(s)) => s.type_params.is_empty(),
                 Item::TypeDef(TypeDef::Enum(e)) => e.type_params.is_empty(),
+                Item::TypeDef(TypeDef::Alias(a)) => a.type_params.is_empty(),
                 _ => true,
             }
         });
@@ -119,6 +120,9 @@ impl Monomorphizer {
                 }
                 Item::TypeDef(TypeDef::Enum(e)) if !e.type_params.is_empty() => {
                     self.generic_enums.insert(e.name.clone(), e.clone());
+                }
+                Item::TypeDef(TypeDef::Alias(_)) => {
+                    // ジェネリック型エイリアスの単相化は現時点では未対応
                 }
                 _ => {}
             }

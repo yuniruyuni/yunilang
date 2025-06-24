@@ -225,7 +225,7 @@ fn test_match_expr_from_parser() -> YuniResult<()> {
     let source = r#"
 package test
 
-enum Result {
+type Result enum {
     Ok {},
     Err {},
 }

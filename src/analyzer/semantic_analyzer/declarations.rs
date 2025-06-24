@@ -12,6 +12,7 @@ impl SemanticAnalyzer {
         match type_def {
             TypeDef::Struct(struct_def) => self.collect_struct_definition(struct_def),
             TypeDef::Enum(enum_def) => self.collect_enum_definition(enum_def),
+            TypeDef::Alias(type_alias) => self.collect_type_alias(type_alias),
         }
     }
 
@@ -78,6 +79,40 @@ impl SemanticAnalyzer {
             kind: TypeKind::Enum(enum_def.variants.clone()),
             methods: HashMap::new(),
             span: enum_def.span,
+        };
+
+        // type_checkerとscopeの両方に登録
+        self.type_checker.register_type(type_info.clone())?;
+        self.scope_stack.last_mut().unwrap().define_type(type_info)?;
+        
+        // 型パラメータのスコープを終了
+        self.type_env.exit_scope();
+        Ok(())
+    }
+
+    /// 型エイリアスを収集
+    pub fn collect_type_alias(&mut self, type_alias: &TypeAlias) -> AnalysisResult<()> {
+        // 型パラメータを環境に登録
+        self.type_env.enter_scope();
+        if let Err(e) = self.type_env.register_type_params(&type_alias.type_params) {
+            return match e {
+                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                _ => Err(AnalysisError::InvalidOperation {
+                    message: format!("Unexpected error in type parameter registration: {:?}", e),
+                    span: type_alias.span,
+                }),
+            };
+        }
+        
+        // 基底型を検証
+        self.type_checker.validate_type(&type_alias.underlying_type, type_alias.span)?;
+
+        let type_info = TypeInfo {
+            name: type_alias.name.clone(),
+            type_params: type_alias.type_params.clone(),
+            kind: TypeKind::Alias(Box::new(type_alias.underlying_type.clone())),
+            methods: HashMap::new(),
+            span: type_alias.span,
         };
 
         // type_checkerとscopeの両方に登録

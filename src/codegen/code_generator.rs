@@ -134,7 +134,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    /// 型を宣言（構造体または列挙型）
+    /// 型を宣言（構造体、列挙型、または型エイリアス）
     fn declare_type(&mut self, type_def: &TypeDef) -> YuniResult<()> {
         match type_def {
             TypeDef::Struct(struct_def) => {
@@ -165,6 +165,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Enum型をi32として登録
                 let enum_type = self.context.i32_type();
                 self.type_manager.register_enum(enum_def.name.clone(), enum_type);
+            }
+            TypeDef::Alias(type_alias) => {
+                // 型エイリアスをTypeManagerに登録
+                self.type_manager.register_type_alias(
+                    type_alias.name.clone(),
+                    type_alias.underlying_type.clone()
+                );
             }
         }
         Ok(())

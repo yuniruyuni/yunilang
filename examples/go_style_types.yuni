@@ -1,0 +1,51 @@
+package main
+
+// 型エイリアスの例
+type UserID i32
+type Distance f64
+
+// 構造体の定義
+type Point struct {
+    x: f64,
+    y: f64
+}
+
+// ジェネリック構造体
+type Box<T> struct {
+    value: T
+}
+
+// 列挙型の定義
+type Status enum {
+    Active,
+    Inactive,
+    Pending
+}
+
+// ジェネリック列挙型
+type Result<T, E> enum {
+    Ok { value: T },
+    Err { error: E }
+}
+
+fn main() {
+    // 型エイリアスの使用
+    let user_id: UserID = 42;
+    println("User ID: ", user_id);
+    
+    // 構造体の使用
+    let p = Point { x: 3.14, y: 2.71 };
+    println("Point x: ", p.x, ", y: ", p.y);
+    
+    // ジェネリック構造体の使用
+    let int_box = Box { value: 100 };
+    println("Box value: ", int_box.value);
+    
+    // 列挙型の使用
+    let status = Status::Active;
+    
+    // ジェネリック列挙型の使用
+    let result = Result::Ok { value: "Success" };
+    
+    println("Program completed!");
+}

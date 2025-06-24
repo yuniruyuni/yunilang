@@ -113,7 +113,11 @@ impl TypeChecker {
     
     /// 型の互換性をチェック
     pub fn check_type_compatibility(&self, expected: &Type, actual: &Type, span: Span) -> AnalysisResult<()> {
-        if !self.types_compatible(expected, actual) {
+        // 型エイリアスを解決してから比較
+        let resolved_expected = self.resolve_type_alias(expected);
+        let resolved_actual = self.resolve_type_alias(actual);
+        
+        if !self.types_compatible(&resolved_expected, &resolved_actual) {
             return Err(AnalysisError::TypeMismatch {
                 expected: self.type_to_string(expected),
                 found: self.type_to_string(actual),
@@ -244,6 +248,46 @@ impl TypeChecker {
     
     pub fn is_string_type(&self, ty: &Type) -> bool {
         matches!(ty, Type::String | Type::Str)
+    }
+    
+    /// 型エイリアスを解決
+    pub fn resolve_type_alias(&self, ty: &Type) -> Type {
+        match ty {
+            Type::UserDefined(name) => {
+                // 型情報を取得
+                if let Some(type_info) = self.types.get(name) {
+                    if let TypeKind::Alias(underlying) = &type_info.kind {
+                        // エイリアスの場合は基底型を再帰的に解決
+                        return self.resolve_type_alias(underlying);
+                    }
+                }
+                // エイリアスでない場合はそのまま返す
+                ty.clone()
+            }
+            Type::Reference(inner, is_mut) => {
+                Type::Reference(Box::new(self.resolve_type_alias(inner)), *is_mut)
+            }
+            Type::Array(elem) => {
+                Type::Array(Box::new(self.resolve_type_alias(elem)))
+            }
+            Type::Tuple(elems) => {
+                Type::Tuple(elems.iter().map(|e| self.resolve_type_alias(e)).collect())
+            }
+            Type::Generic(name, args) => {
+                Type::Generic(
+                    name.clone(),
+                    args.iter().map(|a| self.resolve_type_alias(a)).collect()
+                )
+            }
+            Type::Function(fn_type) => {
+                Type::Function(FunctionType {
+                    params: fn_type.params.iter().map(|p| self.resolve_type_alias(p)).collect(),
+                    return_type: Box::new(self.resolve_type_alias(&fn_type.return_type)),
+                })
+            }
+            // プリミティブ型はそのまま返す
+            _ => ty.clone()
+        }
     }
     
     /// フィールドの型を取得

@@ -370,12 +370,12 @@ mod tests {
         let source = r#"
         package main
         
-        struct Point {
+        type Point struct {
             x: f64,
             y: f64,
         }
         
-        struct Person {
+        type Person struct {
             name: str,
             age: i32,
             active: bool,
@@ -406,13 +406,13 @@ mod tests {
         let source = r#"
         package main
         
-        enum Color {
+        type Color enum {
             Red,
             Green,
             Blue,
         }
         
-        enum Option {
+        type Option enum {
             Some { value: i32 },
             None,
         }
@@ -674,11 +674,11 @@ mod tests {
         
         import "std/io"
         
-        struct Calculator {
+        type Calculator struct {
             result: f64,
         }
         
-        enum Operation {
+        type Operation enum {
             Add,
             Subtract,
             Multiply,
@@ -766,7 +766,7 @@ mod tests {
         let source = r#"
 package main
 
-struct Point {
+type Point struct {
     x: i32,
     y: i32
 }
@@ -800,13 +800,57 @@ impl fn private_method(p: &Point) {
     #[test]
     fn test_visibility_modifiers_errors() {
         // 構造体に可視性修飾子を付けるとエラー
-        assert_parse_error("package main\npub struct Point { x: i32, }");
+        assert_parse_error("package main\npub type Point struct { x: i32, }");
         
         // enumに可視性修飾子を付けるとエラー
-        assert_parse_error("package main\npub enum Option { Some, None }");
+        assert_parse_error("package main\npub type Option enum { Some, None }");
         
         // 型定義に可視性修飾子を付けるとエラー
         assert_parse_error("package main\npub type MyInt = i32;");
+    }
+
+    #[test]
+    fn test_type_alias() {
+        // 型エイリアスのテスト
+        let source = r#"
+        package main
+        
+        type UserID i32
+        type UserName String
+        type Point2D struct { x: f64, y: f64 }
+        
+        fn main() {
+            let id: UserID = 123;
+            let name: UserName = "Alice";
+        }
+        "#;
+        
+        let ast = assert_parse_success(source);
+        assert_eq!(ast.items.len(), 4); // 3 type defs + 1 function
+        
+        // UserID型エイリアス
+        if let Item::TypeDef(TypeDef::Alias(ref alias)) = ast.items[0] {
+            assert_eq!(alias.name, "UserID");
+            assert!(matches!(alias.underlying_type, Type::I32));
+        } else {
+            panic!("Expected type alias");
+        }
+        
+        // UserName型エイリアス
+        if let Item::TypeDef(TypeDef::Alias(ref alias)) = ast.items[1] {
+            assert_eq!(alias.name, "UserName");
+            assert!(matches!(alias.underlying_type, Type::String));
+        } else {
+            panic!("Expected type alias");
+        }
+        
+        // Point2D構造体
+        if let Item::TypeDef(TypeDef::Struct(ref struct_def)) = ast.items[2] {
+            assert_eq!(struct_def.name, "Point2D");
+            assert_eq!(struct_def.fields.len(), 2);
+        } else {
+            panic!("Expected struct definition");
+        }
     }
 
     #[test]

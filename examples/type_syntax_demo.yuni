@@ -1,0 +1,53 @@
+package demo
+
+// Go-style type declaration syntax
+
+// 型エイリアス - 既存の型に新しい名前を付ける
+type UserID i32
+type UserName String
+type Score f64
+
+// 構造体定義
+type User struct {
+    id: UserID,
+    name: UserName,
+    score: Score,
+}
+
+// ジェネリック構造体
+type Container<T> struct {
+    value: T,
+}
+
+// 列挙型定義
+type Status enum {
+    Active,
+    Inactive,
+    Pending { until: i64 },
+}
+
+// ジェネリック列挙型
+type Result<T, E> enum {
+    Ok { value: T },
+    Err { error: E },
+}
+
+fn main() {
+    // 型エイリアスの使用
+    let user_id: UserID = 12345;
+    let user_name: UserName = "Alice";
+    let user_score: Score = 98.5;
+    
+    // 構造体の作成
+    let user = User {
+        id: user_id,
+        name: user_name,
+        score: user_score,
+    };
+    
+    // ジェネリック型の使用
+    let container = Container { value: 42 };
+    let result = Result::Ok { value: "Success" };
+    
+    println("User created successfully!");
+}

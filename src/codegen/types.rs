@@ -15,6 +15,8 @@ pub struct TypeManager<'ctx> {
     types: HashMap<String, StructType<'ctx>>,
     /// Enum型のキャッシュ（Enumはi32として表現）
     enum_types: HashMap<String, BasicTypeEnum<'ctx>>,
+    /// 型エイリアス（型名 -> 基底型）
+    type_aliases: HashMap<String, Type>,
 }
 
 impl<'ctx> TypeManager<'ctx> {
@@ -23,6 +25,7 @@ impl<'ctx> TypeManager<'ctx> {
             context,
             types: HashMap::new(),
             enum_types: HashMap::new(),
+            type_aliases: HashMap::new(),
         }
     }
     
@@ -39,6 +42,11 @@ impl<'ctx> TypeManager<'ctx> {
     /// Enum型を登録（i32として表現）
     pub fn register_enum(&mut self, name: String, enum_type: inkwell::types::IntType<'ctx>) {
         self.enum_types.insert(name, enum_type.into());
+    }
+    
+    /// 型エイリアスを登録
+    pub fn register_type_alias(&mut self, name: String, underlying_type: Type) {
+        self.type_aliases.insert(name, underlying_type);
     }
     
     /// AST型からLLVM型への変換
@@ -71,7 +79,12 @@ impl<'ctx> TypeManager<'ctx> {
                 Ok(self.context.struct_type(&field_types, false).into())
             }
             Type::UserDefined(name) => {
-                // 先に構造体型を探す
+                // まず型エイリアスを解決
+                if let Some(underlying_type) = self.type_aliases.get(name) {
+                    return self.ast_type_to_llvm(underlying_type);
+                }
+                
+                // 構造体型を探す
                 if let Some(struct_type) = self.types.get(name).copied() {
                     Ok(struct_type.into())
                 }

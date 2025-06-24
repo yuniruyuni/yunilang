@@ -12,11 +12,21 @@ pub enum Item {
     TypeDef(TypeDef),
 }
 
-/// 型定義（構造体または列挙型）
+/// 型定義（構造体、列挙型、または型エイリアス）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TypeDef {
     Struct(StructDef),
     Enum(EnumDef),
+    Alias(TypeAlias),
+}
+
+/// 型エイリアス定義
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TypeAlias {
+    pub name: String,
+    pub type_params: Vec<TypeParam>,
+    pub underlying_type: Type,
+    pub span: Span,
 }
 
 /// 構造体定義

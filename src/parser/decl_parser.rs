@@ -52,6 +52,7 @@ impl Parser {
 
     /// 型定義を解析
     fn parse_type_def(&mut self) -> ParseResult<TypeDef> {
+        let start = self.current_span().start;
         self.expect(Token::Type)?;
         let name = self.expect_identifier()?;
         
@@ -73,7 +74,17 @@ impl Parser {
                 let enum_def = self.parse_enum_body(name, type_params)?;
                 Ok(TypeDef::Enum(enum_def))
             }
-            _ => Err(self.error("Expected 'struct' or 'enum' after type name".to_string())),
+            _ => {
+                // 型エイリアス: type Name UnderlyingType
+                let underlying_type = self.parse_type()?;
+                let span = self.span_from(start);
+                Ok(TypeDef::Alias(TypeAlias {
+                    name,
+                    type_params,
+                    underlying_type,
+                    span,
+                }))
+            }
         }
     }
 

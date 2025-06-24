@@ -1,11 +1,11 @@
 package generics
 
 // ジェネリック構造体の定義
-struct Box<T> {
+type Box<T> struct {
     value: T,
 }
 
-struct Pair<T, U> {
+type Pair<T, U> struct {
     first: T,
     second: U,
 }

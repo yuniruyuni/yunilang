@@ -21,7 +21,7 @@ pub use types::{FunctionType, LivesClause, LivesConstraint, Type, TypeParam};
 
 // 宣言を再エクスポート
 pub use declarations::{
-    EnumDef, Field, FunctionDecl, Item, MethodDecl, Param, Receiver, StructDef, TypeDef, Variant,
+    EnumDef, Field, FunctionDecl, Item, MethodDecl, Param, Receiver, StructDef, TypeAlias, TypeDef, Variant,
 };
 
 // 式を再エクスポート

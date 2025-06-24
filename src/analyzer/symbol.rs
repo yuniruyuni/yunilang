@@ -51,6 +51,7 @@ pub struct TypeInfo {
 pub enum TypeKind {
     Struct(Vec<Field>),
     Enum(Vec<Variant>),
+    Alias(Box<Type>),
     Builtin,
 }
 
