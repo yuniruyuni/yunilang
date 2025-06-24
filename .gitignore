@@ -90,12 +90,6 @@ examples/*
 !examples/*.txt
 !examples/README*
 
-# Ignore executables without extension in root directory
-# (Compiled Yuni programs typically have no extension on Unix)
-# Match files without any dots (no extension) in their name
-/[!.]*
-!/*/
-
 # Build artifacts that shouldn't be tracked
 runtime.o
 runtime.c

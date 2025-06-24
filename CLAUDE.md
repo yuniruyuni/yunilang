@@ -116,6 +116,27 @@ Test pattern: Lex → Parse → Analyze → CodeGen for various language feature
 - The compiler supports multiple output formats: executable, LLVM IR, object files, assembly
 - Optimization levels 0-3 are supported and passed through to LLVM
 
+## Development Conventions
+
+### File Organization
+
+**サンプルコードとテストコードの配置規則：**
+
+1. **サンプルコードは必ず `examples/` ディレクトリに配置する**
+   - ルートディレクトリにサンプルコードを作成しない
+   - 例: `examples/hello.yuni`, `examples/generics.yuni`
+
+2. **コンパイル時の出力ファイル指定**
+   - 実行ファイルは `-o` オプションで出力先を明示的に指定する
+   - 推奨: `cargo run -- compile examples/hello.yuni -o examples/hello`
+   - または一時ディレクトリを使用: `cargo run -- compile examples/hello.yuni -o /tmp/hello`
+
+3. **テスト用の一時ファイル**
+   - テスト実行時の一時ファイルは適切にクリーンアップする
+   - 可能な限りインメモリでテストを完結させる
+
+これらの規約により、ルートディレクトリに拡張子のないファイル（コンパイル済み実行ファイル）が生成されることを防ぎ、プロジェクトの整理整頓を保ちます。
+
 ## Documentation Guidelines
 
 **All documentation in this project should be written in Japanese.** This includes:
