@@ -1,0 +1,47 @@
+package generics
+
+// ジェネリック構造体の定義
+struct Box<T> {
+    value: T,
+}
+
+struct Pair<T, U> {
+    first: T,
+    second: U,
+}
+
+// ジェネリック関数の定義
+fn identity<T>(x: T): T {
+    return x;
+}
+
+fn swap<T, U>(pair: Pair<T, U>): Pair<U, T> {
+    return Pair { first: pair.second, second: pair.first };
+}
+
+fn main() {
+    // 型推論により Box<i32> として推論される
+    let int_box = Box { value: 42 };
+    
+    // 型推論により Box<String> として推論される
+    let str_box = Box { value: "Hello, Generics!" };
+    
+    // ジェネリック関数の呼び出し（型推論）
+    let x = identity(100);         // T = i32
+    let y = identity("world");     // T = String
+    let z = identity(true);        // T = bool
+    
+    // 複数の型パラメータを持つ構造体
+    let pair1 = Pair { first: 10, second: "ten" };        // Pair<i32, String>
+    let pair2 = swap(pair1);                              // Pair<String, i32>
+    
+    // ネストしたジェネリック型
+    let nested = Box { value: Box { value: 123 } };       // Box<Box<i32>>
+    
+    // 出力
+    println(int_box.value);
+    println(str_box.value);
+    println(x);
+    println(y);
+    println(z);
+}

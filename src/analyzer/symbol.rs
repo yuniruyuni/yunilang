@@ -1,6 +1,6 @@
 //! シンボルテーブルおよび関連するデータ構造
 
-use crate::ast::{Field, LivesClause, Span, Type, Variant};
+use crate::ast::{Field, LivesClause, Span, Type, TypeParam, Variant};
 use crate::error::AnalyzerError;
 use std::collections::HashMap;
 
@@ -28,6 +28,7 @@ pub struct Symbol {
 #[allow(dead_code)]
 pub struct FunctionSignature {
     pub name: String,
+    pub type_params: Vec<TypeParam>,
     pub params: Vec<(String, Type)>,
     pub return_type: Type,
     pub lives_clause: Option<LivesClause>,
@@ -40,6 +41,7 @@ pub struct FunctionSignature {
 #[derive(Debug, Clone)]
 pub struct TypeInfo {
     pub name: String,
+    pub type_params: Vec<TypeParam>,
     pub kind: TypeKind,
     pub methods: HashMap<String, FunctionSignature>,
     pub span: Span,

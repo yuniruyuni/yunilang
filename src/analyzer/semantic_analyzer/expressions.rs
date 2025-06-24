@@ -2,6 +2,7 @@
 
 use crate::ast::*;
 use crate::analyzer::symbol::{AnalysisError, AnalysisResult, TypeKind};
+use crate::analyzer::type_inference::TypeInference;
 use super::SemanticAnalyzer;
 
 impl SemanticAnalyzer {
@@ -226,14 +227,63 @@ impl SemanticAnalyzer {
                     });
                 }
                 
-                // 各引数の型チェック
-                for (i, arg) in call.args.iter().enumerate() {
-                    let arg_type = self.analyze_expression(arg)?;
-                    let expected_type = &func_sig.params[i].1;
-                    self.type_checker.check_type_compatibility(expected_type, &arg_type, call.span)?;
+                // ジェネリック関数の場合、型推論を行う
+                if !func_sig.type_params.is_empty() {
+                    // 型パラメータのスコープを開始
+                    self.type_env.enter_scope();
+                    
+                    // 型パラメータを環境に登録
+                    if let Err(e) = self.type_env.register_type_params(&func_sig.type_params) {
+                        return match e {
+                            crate::error::YuniError::Analyzer(ae) => Err(ae),
+                            _ => Err(AnalysisError::InvalidOperation {
+                                message: format!("Unexpected error in type parameter registration: {:?}", e),
+                                span: call.span,
+                            }),
+                        };
+                    }
+                    
+                    // 各引数の型を収集
+                    let mut arg_types = Vec::new();
+                    for arg in &call.args {
+                        arg_types.push(self.analyze_expression(arg)?);
+                    }
+                    
+                    // 型推論エンジンを作成して型パラメータを推論
+                    let mut inference = TypeInference::new(&mut self.type_env);
+                    for (i, arg_type) in arg_types.iter().enumerate() {
+                        let expected_type = &func_sig.params[i].1;
+                        
+                        // 型を統一（型変数のバインディングを設定）
+                        if let Err(e) = inference.unify(expected_type, arg_type, call.span) {
+                            self.type_env.exit_scope(); // スコープをクリーンアップ
+                            return match e {
+                                crate::error::YuniError::Analyzer(ae) => Err(ae),
+                                _ => Err(AnalysisError::InvalidOperation {
+                                    message: format!("Type inference error: {:?}", e),
+                                    span: call.span,
+                                }),
+                            };
+                        }
+                    }
+                    
+                    // 推論された型で戻り値型を具体化
+                    let instantiated_return_type = self.type_env.instantiate_type(&func_sig.return_type);
+                    
+                    // 型パラメータのスコープを終了
+                    self.type_env.exit_scope();
+                    
+                    Ok(instantiated_return_type)
+                } else {
+                    // 非ジェネリック関数の場合、従来通りの処理
+                    for (i, arg) in call.args.iter().enumerate() {
+                        let arg_type = self.analyze_expression(arg)?;
+                        let expected_type = &func_sig.params[i].1;
+                        self.type_checker.check_type_compatibility(expected_type, &arg_type, call.span)?;
+                    }
+                    
+                    Ok(func_sig.return_type)
                 }
-                
-                Ok(func_sig.return_type)
             } else {
                 Err(AnalysisError::UndefinedFunction {
                     name: ident.name.clone(),
@@ -258,7 +308,7 @@ impl SemanticAnalyzer {
         let struct_name = struct_lit.name.clone();
         let struct_span = struct_lit.span;
         
-        if let Some(type_info) = self.type_checker.get_type_info(&struct_name) {
+        if let Some(type_info) = self.type_checker.get_type_info(&struct_name).cloned() {
             let fields = match &type_info.kind {
                 TypeKind::Struct(fields) => fields.clone(),
                 _ => return Err(AnalysisError::InvalidOperation {
@@ -267,20 +317,88 @@ impl SemanticAnalyzer {
                 }),
             };
             
-            // 各フィールドの型チェック
-            for field_init in &struct_lit.fields {
-                if let Some(field_def) = fields.iter().find(|f| f.name == field_init.name) {
-                    let value_type = self.analyze_expression(&field_init.value)?;
-                    self.type_checker.check_type_compatibility(&field_def.ty, &value_type, struct_span)?;
-                } else {
-                    return Err(AnalysisError::UndefinedVariable {
-                        name: format!("{}.{}", struct_name, field_init.name),
-                        span: struct_span,
-                    });
+            // ジェネリック構造体の場合、型推論を行う
+            if !type_info.type_params.is_empty() {
+                // 型パラメータのスコープを開始
+                self.type_env.enter_scope();
+                
+                // 型パラメータを環境に登録
+                if let Err(e) = self.type_env.register_type_params(&type_info.type_params) {
+                    return match e {
+                        crate::error::YuniError::Analyzer(ae) => Err(ae),
+                        _ => Err(AnalysisError::InvalidOperation {
+                            message: format!("Unexpected error in type parameter registration: {:?}", e),
+                            span: struct_span,
+                        }),
+                    };
                 }
+                
+                // 各フィールドの値の型を収集
+                let mut field_value_types = Vec::new();
+                for field_init in &struct_lit.fields {
+                    if let Some(field_def) = fields.iter().find(|f| f.name == field_init.name) {
+                        let value_type = self.analyze_expression(&field_init.value)?;
+                        field_value_types.push((field_def.ty.clone(), value_type));
+                    } else {
+                        self.type_env.exit_scope(); // スコープをクリーンアップ
+                        return Err(AnalysisError::UndefinedVariable {
+                            name: format!("{}.{}", struct_name, field_init.name),
+                            span: struct_span,
+                        });
+                    }
+                }
+                
+                // 型推論エンジンを作成して型パラメータを推論
+                let mut inference = TypeInference::new(&mut self.type_env);
+                for (field_type, value_type) in &field_value_types {
+                    // 型を統一（型変数のバインディングを設定）
+                    if let Err(e) = inference.unify(field_type, value_type, struct_span) {
+                        self.type_env.exit_scope(); // スコープをクリーンアップ
+                        return match e {
+                            crate::error::YuniError::Analyzer(ae) => Err(ae),
+                            _ => Err(AnalysisError::InvalidOperation {
+                                message: format!("Type inference error: {:?}", e),
+                                span: struct_span,
+                            }),
+                        };
+                    }
+                }
+                
+                // 推論された型パラメータを収集
+                let mut type_args = Vec::new();
+                for type_param in &type_info.type_params {
+                    if let Some(binding) = self.type_env.get_binding(&type_param.name) {
+                        type_args.push(binding.clone());
+                    } else {
+                        self.type_env.exit_scope(); // スコープをクリーンアップ
+                        return Err(AnalysisError::TypeInferenceError {
+                            name: type_param.name.clone(),
+                            span: struct_span,
+                        });
+                    }
+                }
+                
+                // 型パラメータのスコープを終了
+                self.type_env.exit_scope();
+                
+                // ジェネリック型を返す
+                Ok(Type::Generic(struct_name, type_args))
+            } else {
+                // 非ジェネリック構造体の場合、従来通りの処理
+                for field_init in &struct_lit.fields {
+                    if let Some(field_def) = fields.iter().find(|f| f.name == field_init.name) {
+                        let value_type = self.analyze_expression(&field_init.value)?;
+                        self.type_checker.check_type_compatibility(&field_def.ty, &value_type, struct_span)?;
+                    } else {
+                        return Err(AnalysisError::UndefinedVariable {
+                            name: format!("{}.{}", struct_name, field_init.name),
+                            span: struct_span,
+                        });
+                    }
+                }
+                
+                Ok(Type::UserDefined(struct_name))
             }
-            
-            Ok(Type::UserDefined(struct_name))
         } else {
             Err(AnalysisError::UndefinedType {
                 name: struct_name,

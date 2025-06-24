@@ -36,6 +36,7 @@ impl SemanticAnalyzer {
 
         let type_info = TypeInfo {
             name: struct_def.name.clone(),
+            type_params: struct_def.type_params.clone(),
             kind: TypeKind::Struct(struct_def.fields.clone()),
             methods: HashMap::new(),
             span: struct_def.span,
@@ -73,6 +74,7 @@ impl SemanticAnalyzer {
 
         let type_info = TypeInfo {
             name: enum_def.name.clone(),
+            type_params: enum_def.type_params.clone(),
             kind: TypeKind::Enum(enum_def.variants.clone()),
             methods: HashMap::new(),
             span: enum_def.span,
@@ -114,6 +116,7 @@ impl SemanticAnalyzer {
 
         let signature = FunctionSignature {
             name: func.name.clone(),
+            type_params: func.type_params.clone(),
             params: func.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
             return_type,
             lives_clause: func.lives_clause.clone(),
@@ -183,6 +186,7 @@ impl SemanticAnalyzer {
         // メソッドシグネチャを作成
         let signature = FunctionSignature {
             name: method.name.clone(),
+            type_params: method.type_params.clone(),
             params: method.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
             return_type,
             lives_clause: method.lives_clause.clone(),

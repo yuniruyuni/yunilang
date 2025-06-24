@@ -49,6 +49,7 @@ impl TypeChecker {
                 type_name.to_string(),
                 TypeInfo {
                     name: type_name.to_string(),
+                    type_params: Vec::new(),
                     kind: TypeKind::Builtin,
                     methods: HashMap::new(),
                     span: Span::dummy(),
@@ -62,6 +63,7 @@ impl TypeChecker {
         // println関数
         let println_sig = FunctionSignature {
             name: "println".to_string(),
+            type_params: Vec::new(),
             params: vec![("value".to_string(), Type::String)],
             return_type: Type::Void,
             lives_clause: None,
@@ -74,6 +76,7 @@ impl TypeChecker {
         // sqrt関数
         let sqrt_sig = FunctionSignature {
             name: "sqrt".to_string(),
+            type_params: Vec::new(),
             params: vec![("value".to_string(), Type::F64)],
             return_type: Type::F64,
             lives_clause: None,
@@ -272,6 +275,44 @@ impl TypeChecker {
                     })
                 }
             }
+            Type::Generic(name, type_args) => {
+                // ジェネリック型の場合、型パラメータを置換してフィールド型を取得
+                if let Some(type_info) = self.types.get(name) {
+                    match &type_info.kind {
+                        TypeKind::Struct(fields) => {
+                            // 型パラメータから型引数へのマッピングを作成
+                            let mut substitutions = std::collections::HashMap::new();
+                            for (i, type_param) in type_info.type_params.iter().enumerate() {
+                                if i < type_args.len() {
+                                    substitutions.insert(type_param.name.clone(), type_args[i].clone());
+                                }
+                            }
+                            
+                            // フィールドを検索
+                            for field in fields {
+                                if field.name == field_name {
+                                    // フィールドの型に置換を適用
+                                    let field_type = self.substitute_type(&field.ty, &substitutions);
+                                    return Ok(field_type);
+                                }
+                            }
+                            Err(AnalysisError::UndefinedVariable {
+                                name: format!("{}.{}", name, field_name),
+                                span,
+                            })
+                        }
+                        _ => Err(AnalysisError::InvalidOperation {
+                            message: format!("Type {} is not a struct", name),
+                            span,
+                        }),
+                    }
+                } else {
+                    Err(AnalysisError::UndefinedType {
+                        name: name.clone(),
+                        span,
+                    })
+                }
+            }
             Type::Reference(inner, _) => {
                 // 参照型の場合、内部の型でフィールドアクセス
                 self.get_field_type(inner, field_name, span)
@@ -432,6 +473,24 @@ impl TypeChecker {
                 (*mut_a == *mut_b || (!*mut_a && *mut_b)) && self.types_compatible_internal(ref_a, ref_b)
             }
             
+            // ジェネリック型の互換性
+            (Type::Generic(name_a, args_a), Type::Generic(name_b, args_b)) => {
+                name_a == name_b && 
+                args_a.len() == args_b.len() &&
+                args_a.iter().zip(args_b.iter()).all(|(a, b)| self.types_compatible_internal(a, b))
+            }
+            
+            // 配列型の互換性
+            (Type::Array(elem_a), Type::Array(elem_b)) => {
+                self.types_compatible_internal(elem_a, elem_b)
+            }
+            
+            // タプル型の互換性
+            (Type::Tuple(types_a), Type::Tuple(types_b)) => {
+                types_a.len() == types_b.len() &&
+                types_a.iter().zip(types_b.iter()).all(|(a, b)| self.types_compatible_internal(a, b))
+            }
+            
             // その他は非互換
             _ => false,
         }
@@ -475,5 +534,46 @@ impl TypeChecker {
     pub fn get_method_signature(&self, type_name: &str, method_name: &str) -> Option<&FunctionSignature> {
         self.types.get(type_name)
             .and_then(|type_info| type_info.methods.get(method_name))
+    }
+    
+    /// 型に型パラメータの置換を適用
+    fn substitute_type(&self, ty: &Type, substitutions: &std::collections::HashMap<String, Type>) -> Type {
+        match ty {
+            Type::Variable(name) => {
+                substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
+            }
+            Type::Generic(name, args) => {
+                let substituted_args: Vec<Type> = args
+                    .iter()
+                    .map(|arg| self.substitute_type(arg, substitutions))
+                    .collect();
+                Type::Generic(name.clone(), substituted_args)
+            }
+            Type::Array(elem_ty) => {
+                Type::Array(Box::new(self.substitute_type(elem_ty, substitutions)))
+            }
+            Type::Reference(inner_ty, is_mut) => {
+                Type::Reference(Box::new(self.substitute_type(inner_ty, substitutions)), *is_mut)
+            }
+            Type::Tuple(types) => {
+                let substituted_types: Vec<Type> = types
+                    .iter()
+                    .map(|t| self.substitute_type(t, substitutions))
+                    .collect();
+                Type::Tuple(substituted_types)
+            }
+            Type::Function(fn_type) => {
+                let substituted_params: Vec<Type> = fn_type.params
+                    .iter()
+                    .map(|p| self.substitute_type(p, substitutions))
+                    .collect();
+                let substituted_return = self.substitute_type(&fn_type.return_type, substitutions);
+                Type::Function(FunctionType {
+                    params: substituted_params,
+                    return_type: Box::new(substituted_return),
+                })
+            }
+            _ => ty.clone(),
+        }
     }
 }

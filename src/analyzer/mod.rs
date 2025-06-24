@@ -10,6 +10,7 @@ mod symbol;
 mod tail_position;
 mod type_checker;
 mod type_env;
+mod type_inference;
 
 // 公開API
 pub use semantic_analyzer::SemanticAnalyzer;

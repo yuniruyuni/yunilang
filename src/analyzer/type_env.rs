@@ -121,12 +121,14 @@ impl TypeEnvironment {
     }
     
     /// 型変数を収集
+    #[allow(dead_code)]
     pub fn collect_type_variables(&self, ty: &Type) -> HashSet<String> {
         let mut vars = HashSet::new();
         self.collect_type_variables_impl(ty, &mut vars);
         vars
     }
     
+    #[allow(dead_code)]
     fn collect_type_variables_impl(&self, ty: &Type, vars: &mut HashSet<String>) {
         match ty {
             Type::Variable(name) => {
