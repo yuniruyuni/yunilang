@@ -132,7 +132,7 @@ impl Monomorphizer {
                         let type_args = self.infer_type_args_from_call(&ident.name, &call.args)?;
                         if !type_args.is_empty() {
                             // マングルされた名前に置き換え
-                            let mangled_name = super::mangle_function_name(&ident.name, &type_args);
+                            let mangled_name = crate::analyzer::monomorphization::mangling::mangle_function_name(&ident.name, &type_args);
                             return Ok(Expression::Call(CallExpr {
                                 callee: Box::new(Expression::Identifier(Identifier {
                                     name: mangled_name,
@@ -165,7 +165,7 @@ impl Monomorphizer {
                     let type_args = self.infer_type_args_from_struct_lit(struct_lit)?;
                     if !type_args.is_empty() {
                         // マングルされた名前に置き換え
-                        let mangled_name = super::mangle_struct_name(&struct_lit.name, &type_args);
+                        let mangled_name = crate::analyzer::monomorphization::mangling::mangle_struct_name(&struct_lit.name, &type_args);
                         let mut new_fields = Vec::new();
                         for field in &struct_lit.fields {
                             new_fields.push(StructFieldInit {

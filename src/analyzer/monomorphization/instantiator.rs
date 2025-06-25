@@ -42,7 +42,7 @@ impl Monomorphizer {
         }
         
         // 関数名をマングル
-        func.name = super::mangle_function_name(&func.name, type_args);
+        func.name = crate::analyzer::monomorphization::mangling::mangle_function_name(&func.name, type_args);
         
         // 型パラメータをクリア
         func.type_params.clear();
@@ -74,7 +74,7 @@ impl Monomorphizer {
         }
         
         // 構造体名をマングル
-        struct_def.name = super::mangle_struct_name(&struct_def.name, type_args);
+        struct_def.name = crate::analyzer::monomorphization::mangling::mangle_struct_name(&struct_def.name, type_args);
         
         // 型パラメータをクリア
         struct_def.type_params.clear();
@@ -98,7 +98,7 @@ impl Monomorphizer {
         }
         
         // 列挙型名をマングル
-        enum_def.name = super::mangle_struct_name(&enum_def.name, type_args);
+        enum_def.name = crate::analyzer::monomorphization::mangling::mangle_struct_name(&enum_def.name, type_args);
         
         // 型パラメータをクリア
         enum_def.type_params.clear();

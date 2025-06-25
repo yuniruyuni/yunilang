@@ -1,6 +1,6 @@
 //! 名前マングリング処理
 
-use crate::ast::{Type, FunctionType};
+use crate::ast::Type;
 
 /// 型を文字列に変換（マングリング用）
 pub fn type_to_string(ty: &Type) -> String {
@@ -38,7 +38,7 @@ pub fn type_to_string(ty: &Type) -> String {
         // タプル型
         Type::Tuple(types) => {
             let type_strs: Vec<String> = types.iter()
-                .map(|t| type_to_string(t))
+                .map(type_to_string)
                 .collect();
             format!("tuple_{}", type_strs.join("_"))
         }
@@ -55,7 +55,7 @@ pub fn type_to_string(ty: &Type) -> String {
         // 関数型
         Type::Function(func_type) => {
             let param_strs: Vec<String> = func_type.params.iter()
-                .map(|p| type_to_string(p))
+                .map(type_to_string)
                 .collect();
             let ret_str = type_to_string(&func_type.return_type);
             format!("fn_{}_{}", param_strs.join("_"), ret_str)
@@ -67,7 +67,7 @@ pub fn type_to_string(ty: &Type) -> String {
         // ジェネリック型
         Type::Generic(name, args) => {
             let arg_strs: Vec<String> = args.iter()
-                .map(|arg| type_to_string(arg))
+                .map(type_to_string)
                 .collect();
             format!("{}_{}", name, arg_strs.join("_"))
         }
@@ -80,7 +80,7 @@ pub fn mangle_function_name(name: &str, type_args: &[Type]) -> String {
         name.to_string()
     } else {
         let type_strs: Vec<String> = type_args.iter()
-            .map(|t| type_to_string(t))
+            .map(type_to_string)
             .collect();
         format!("{}_{}", name, type_strs.join("_"))
     }
@@ -92,7 +92,7 @@ pub fn mangle_struct_name(name: &str, type_args: &[Type]) -> String {
         name.to_string()
     } else {
         let type_strs: Vec<String> = type_args.iter()
-            .map(|t| type_to_string(t))
+            .map(type_to_string)
             .collect();
         format!("{}_{}", name, type_strs.join("_"))
     }

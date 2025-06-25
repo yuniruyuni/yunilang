@@ -1,10 +1,7 @@
-//! 制御フロー式の解析
-//!
-//! match式を解析する。
+// 制御フロー式の解析
+//
+// match式を解析する。
 
-use crate::ast::*;
-use crate::lexer::Token;
-use crate::parser::{ParseResult, Parser};
 
 impl Parser {
     /// match式を解析

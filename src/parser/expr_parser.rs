@@ -1,14 +1,16 @@
 //! 式の解析
-//!
-//! このファイルは式解析のメインエントリーポイントを提供する。
-//! 実際の解析処理は expr/ モジュール以下に分散されている。
+
+// 式解析のサブモジュールをインクルード
+include!("expr/binary_expr.rs");
+include!("expr/unary_expr.rs");
+include!("expr/postfix_expr.rs");
+include!("expr/literal_expr.rs");
+include!("expr/complex_expr.rs");
+include!("expr/control_expr.rs");
 
 use crate::ast::*;
-
+use crate::lexer::Token;
 use super::{ParseResult, Parser};
-
-// expr モジュールから必要な機能をインポート
-use super::expr::*;
 
 impl Parser {
     /// 式を解析（内部実装）

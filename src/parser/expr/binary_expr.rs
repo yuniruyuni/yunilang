@@ -1,10 +1,7 @@
-//! 二項演算式の解析
-//!
-//! 演算子の優先順位に従って二項演算式を解析する。
+// 二項演算式の解析
+//
+// 演算子の優先順位に従って二項演算式を解析する。
 
-use crate::ast::*;
-use crate::lexer::Token;
-use crate::parser::{ParseResult, Parser};
 
 impl Parser {
     /// OR式を解析

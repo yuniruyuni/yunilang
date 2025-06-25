@@ -167,7 +167,7 @@ impl Monomorphizer {
                             // インスタンス化をキューに追加
                             self.queue_instantiation(&ident.name, type_args.clone(), InstantiationType::Function);
                             // マングルされた名前に置き換え
-                            let mangled_name = super::mangle_function_name(&ident.name, &type_args);
+                            let mangled_name = crate::analyzer::monomorphization::mangling::mangle_function_name(&ident.name, &type_args);
                             return Ok(Expression::Call(CallExpr {
                                 callee: Box::new(Expression::Identifier(Identifier {
                                     name: mangled_name,
@@ -206,7 +206,7 @@ impl Monomorphizer {
                         // インスタンス化をキューに追加
                         self.queue_instantiation(&struct_lit.name, type_args.clone(), InstantiationType::Struct);
                         // マングルされた名前に置き換え
-                        new_name = super::mangle_struct_name(&struct_lit.name, &type_args);
+                        new_name = crate::analyzer::monomorphization::mangling::mangle_struct_name(&struct_lit.name, &type_args);
                     }
                 }
                 

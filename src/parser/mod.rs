@@ -33,7 +33,6 @@
 //! これにより、一貫性のある読みやすい構文を実現しています。
 
 mod decl_parser;
-mod expr;
 mod expr_parser;
 mod parser_impl;
 mod pattern_parser;

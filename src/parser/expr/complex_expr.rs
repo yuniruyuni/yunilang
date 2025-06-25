@@ -1,10 +1,7 @@
-//! 複雑な式の解析
-//!
-//! 構造体リテラル、enumバリアント、パス式、if式を解析する。
+// 複雑な式の解析
+//
+// 構造体リテラル、enumバリアント、パス式、if式を解析する。
 
-use crate::ast::*;
-use crate::lexer::Token;
-use crate::parser::{ParseResult, Parser};
 
 impl Parser {
     /// 構造体リテラルを解析

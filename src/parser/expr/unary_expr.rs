@@ -1,10 +1,7 @@
-//! 単項演算式とキャスト式の解析
-//!
-//! 単項演算子（!、-、~、&、*）とas演算子によるキャスト式を解析する。
+// 単項演算式とキャスト式の解析
+//
+// 単項演算子（!、-、~、&、*）とas演算子によるキャスト式を解析する。
 
-use crate::ast::*;
-use crate::lexer::Token;
-use crate::parser::{ParseResult, Parser};
 
 impl Parser {
     /// キャスト式を解析

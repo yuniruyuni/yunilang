@@ -17,12 +17,7 @@ mod mangling;
 
 // 再エクスポート
 pub use types::*;
-use collector::*;
-use type_inference::*;
-use instantiator::*;
-use substitution::*;
-use replacement::*;
-use mangling::*;
+
 
 /// 単相化エンジン
 pub struct Monomorphizer {
