@@ -1,0 +1,31 @@
+//! 式の解析モジュール
+//!
+//! 式の解析を複数のサブモジュールに分割して管理する。
+//! 各モジュールは特定の種類の式の解析を担当する。
+
+use crate::ast::*;
+use crate::lexer::Token;
+use super::{ParseResult, Parser};
+
+// サブモジュール
+mod binary_expr;
+mod unary_expr;
+mod postfix_expr;
+mod literal_expr;
+mod complex_expr;
+mod control_expr;
+
+// 各モジュールの公開インターフェースを再エクスポート
+pub(super) use binary_expr::*;
+pub(super) use unary_expr::*;
+pub(super) use postfix_expr::*;
+pub(super) use literal_expr::*;
+pub(super) use complex_expr::*;
+pub(super) use control_expr::*;
+
+impl Parser {
+    /// 式を解析（内部実装）
+    pub(super) fn parse_expression_internal(&mut self) -> ParseResult<Expression> {
+        self.parse_or_expression()
+    }
+}
