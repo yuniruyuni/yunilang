@@ -144,11 +144,13 @@ impl Monomorphizer {
             }
             Expression::StructLit(struct_lit) => {
                 // ジェネリック構造体のインスタンス化かチェック
-                if self.generic_structs.contains_key(&struct_lit.name) {
-                    // TODO: フィールドの型から型引数を推論
-                    let type_args = self.infer_type_args_from_struct_lit(struct_lit)?;
-                    if !type_args.is_empty() {
-                        self.queue_instantiation(&struct_lit.name, type_args, InstantiationType::Struct);
+                if let Some(name) = &struct_lit.name {
+                    if self.generic_structs.contains_key(name) {
+                        // TODO: フィールドの型から型引数を推論
+                        let type_args = self.infer_type_args_from_struct_lit(struct_lit)?;
+                        if !type_args.is_empty() {
+                            self.queue_instantiation(name, type_args, InstantiationType::Struct);
+                        }
                     }
                 }
                 

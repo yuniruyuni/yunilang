@@ -1,0 +1,23 @@
+package main
+
+// 新しい初期化子構文のテスト
+
+fn main() {
+    // リストリテラル（配列風）
+    let numbers = [1, 2, 3, 4, 5];
+    let vec = Vec<i32>[10, 20, 30];
+    
+    // 構造体リテラル
+    let point = Point { x: 10.0, y: 20.0 };
+    
+    // マップリテラル（将来の実装）
+    // let scores = HashMap<String, i32> {
+    //     "Alice": 95,
+    //     "Bob": 87
+    // };
+}
+
+type Point struct {
+    x: f64,
+    y: f64
+}

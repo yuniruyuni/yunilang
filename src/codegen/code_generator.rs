@@ -52,6 +52,48 @@ pub struct CodeGenerator<'ctx> {
 }
 
 impl<'ctx> CodeGenerator<'ctx> {
+    /// 型のサイズを取得（バイト単位）
+    pub fn get_size_of_type(&self, ty: BasicTypeEnum<'ctx>) -> u64 {
+        match ty {
+            BasicTypeEnum::IntType(int_type) => {
+                // ビット数をバイト数に変換
+                (int_type.get_bit_width() / 8) as u64
+            }
+            BasicTypeEnum::FloatType(float_type) => {
+                // FloatTypeのビット幅を取得
+                match float_type {
+                    t if t == self.context.f32_type() => 4,
+                    t if t == self.context.f64_type() => 8,
+                    t if t == self.context.f128_type() => 16,
+                    _ => 8, // デフォルト
+                }
+            }
+            BasicTypeEnum::PointerType(_) => {
+                // ポインタサイズ（64ビットシステムを仮定）
+                8
+            }
+            BasicTypeEnum::StructType(struct_type) => {
+                // 構造体の場合、各フィールドのサイズの合計（簡易実装）
+                // 実際にはアライメントを考慮する必要がある
+                let mut size = 0u64;
+                for i in 0..struct_type.count_fields() {
+                    if let Some(field_type) = struct_type.get_field_type_at_index(i) {
+                        size += self.get_size_of_type(field_type);
+                    }
+                }
+                size
+            }
+            BasicTypeEnum::ArrayType(array_type) => {
+                let element_size = self.get_size_of_type(array_type.get_element_type());
+                element_size * array_type.len() as u64
+            }
+            BasicTypeEnum::VectorType(vector_type) => {
+                let element_size = self.get_size_of_type(vector_type.get_element_type());
+                element_size * vector_type.get_size() as u64
+            }
+        }
+    }
+
     pub fn new(context: &'ctx LLVMContext, module_name: &str) -> Self {
         let module = context.create_module(module_name);
         let builder = context.create_builder();

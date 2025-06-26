@@ -38,6 +38,8 @@ impl SemanticAnalyzer {
             Expression::Dereference(deref_expr) => self.analyze_dereference_expression(deref_expr),
             Expression::Assignment(assign_expr) => self.analyze_assignment_expression(assign_expr),
             Expression::Tuple(tuple_expr) => self.analyze_tuple_expression(tuple_expr),
+            Expression::ListLiteral(list) => self.analyze_list_literal(list, expected_type),
+            Expression::MapLiteral(map) => self.analyze_map_literal(map, expected_type),
         }
     }
 
@@ -137,7 +139,7 @@ impl SemanticAnalyzer {
         let object_type = self.analyze_expression(&index_expr.object)?;
         let index_type = self.analyze_expression(&index_expr.index)?;
         
-        // 配列型の場合、要素型を返す
+        // 配列型またはVec型の場合、要素型を返す
         match object_type {
             Type::Array(elem_type) => {
                 // インデックスが整数型であることを確認
@@ -150,8 +152,20 @@ impl SemanticAnalyzer {
                 }
                 Ok(*elem_type)
             }
+            Type::Generic(name, type_args) if name == "Vec" && type_args.len() == 1 => {
+                // Vec型の場合
+                // インデックスが整数型であることを確認
+                if !self.type_checker.is_integer_type(&index_type) {
+                    return Err(AnalysisError::TypeMismatch {
+                        expected: "integer type".to_string(),
+                        found: self.type_checker.type_to_string(&index_type),
+                        span: index_expr.span,
+                    });
+                }
+                Ok(type_args[0].clone())
+            }
             _ => Err(AnalysisError::TypeMismatch {
-                expected: "array type".to_string(),
+                expected: "array or Vec type".to_string(),
                 found: self.type_checker.type_to_string(&object_type),
                 span: index_expr.span,
             }),
@@ -304,8 +318,16 @@ impl SemanticAnalyzer {
 
     /// 構造体リテラル式の解析
     pub fn analyze_struct_literal(&mut self, struct_lit: &StructLiteral) -> AnalysisResult<Type> {
-        // 構造体型の検証
-        let struct_name = struct_lit.name.clone();
+        // 型名が指定されていない場合は、文脈から推論される必要がある
+        let struct_name = match &struct_lit.name {
+            Some(name) => name.clone(),
+            None => {
+                return Err(AnalysisError::InvalidOperation {
+                    message: "Type inference for anonymous struct literals not yet implemented".to_string(),
+                    span: struct_lit.span,
+                });
+            }
+        };
         let struct_span = struct_lit.span;
         
         if let Some(type_info) = self.type_checker.get_type_info(&struct_name).cloned() {
@@ -448,4 +470,302 @@ impl SemanticAnalyzer {
         // テンプレート文字列の結果型は常にString
         Ok(Type::String)
     }
+
+    /// 初期化式の解析
+    fn analyze_list_literal(&mut self, list: &ListLiteral, expected_type: Option<&Type>) -> AnalysisResult<Type> {
+        // 型名が指定されている場合
+        if let Some((type_name, type_args)) = &list.type_name {
+            if type_name == "Vec" && type_args.len() == 1 {
+                let element_type = &type_args[0];
+                
+                // 各要素の型をチェック
+                for elem in &list.elements {
+                    let elem_type = self.analyze_expression(elem)?;
+                    self.type_checker.check_type_compatibility(element_type, &elem_type, elem.span())?;
+                }
+                
+                return Ok(Type::Generic("Vec".to_string(), type_args.clone()));
+            } else {
+                return Err(AnalysisError::InvalidOperation {
+                    message: format!("Unknown list type: {}", type_name),
+                    span: list.span,
+                });
+            }
+        }
+        
+        // 型名が省略されている場合、期待される型または要素から推論
+        if let Some(expected) = expected_type {
+            if let Type::Generic(name, args) = expected {
+                if name == "Vec" && args.len() == 1 {
+                    let element_type = &args[0];
+                    
+                    for elem in &list.elements {
+                        let elem_type = self.analyze_expression(elem)?;
+                        self.type_checker.check_type_compatibility(element_type, &elem_type, elem.span())?;
+                    }
+                    
+                    return Ok(expected.clone());
+                }
+            }
+        }
+        
+        // 要素から型を推論
+        if !list.elements.is_empty() {
+            let first_type = self.analyze_expression(&list.elements[0])?;
+            
+            for elem in &list.elements[1..] {
+                let elem_type = self.analyze_expression(elem)?;
+                self.type_checker.check_type_compatibility(&first_type, &elem_type, elem.span())?;
+            }
+            
+            return Ok(Type::Generic("Vec".to_string(), vec![first_type]));
+        }
+        
+        // 空のリストの場合、エラー
+        Err(AnalysisError::InvalidOperation {
+            message: "Cannot infer type for empty list literal without type annotation".to_string(),
+            span: list.span,
+        })
+    }
+    
+    fn analyze_map_literal(&mut self, map: &MapLiteral, expected_type: Option<&Type>) -> AnalysisResult<Type> {
+        // 型名が指定されている場合
+        if let Some((type_name, type_args)) = &map.type_name {
+            if type_name == "HashMap" && type_args.len() == 2 {
+                let key_type = &type_args[0];
+                let value_type = &type_args[1];
+                
+                // 各ペアの型をチェック
+                for (key, value) in &map.pairs {
+                    let k_type = self.analyze_expression(key)?;
+                    let v_type = self.analyze_expression(value)?;
+                    self.type_checker.check_type_compatibility(key_type, &k_type, key.span())?;
+                    self.type_checker.check_type_compatibility(value_type, &v_type, value.span())?;
+                }
+                
+                return Ok(Type::Generic("HashMap".to_string(), type_args.clone()));
+            } else {
+                return Err(AnalysisError::InvalidOperation {
+                    message: format!("Unknown map type: {}", type_name),
+                    span: map.span,
+                });
+            }
+        }
+        
+        // 型名が省略されている場合、期待される型または要素から推論
+        if let Some(expected) = expected_type {
+            if let Type::Generic(name, args) = expected {
+                if name == "HashMap" && args.len() == 2 {
+                    let key_type = &args[0];
+                    let value_type = &args[1];
+                    
+                    for (key, value) in &map.pairs {
+                        let k_type = self.analyze_expression(key)?;
+                        let v_type = self.analyze_expression(value)?;
+                        self.type_checker.check_type_compatibility(key_type, &k_type, key.span())?;
+                        self.type_checker.check_type_compatibility(value_type, &v_type, value.span())?;
+                    }
+                    
+                    return Ok(expected.clone());
+                }
+            }
+        }
+        
+        // 要素から型を推論
+        if !map.pairs.is_empty() {
+            let (first_key, first_value) = &map.pairs[0];
+            let key_type = self.analyze_expression(first_key)?;
+            let value_type = self.analyze_expression(first_value)?;
+            
+            for (key, value) in &map.pairs[1..] {
+                let k_type = self.analyze_expression(key)?;
+                let v_type = self.analyze_expression(value)?;
+                self.type_checker.check_type_compatibility(&key_type, &k_type, key.span())?;
+                self.type_checker.check_type_compatibility(&value_type, &v_type, value.span())?;
+            }
+            
+            return Ok(Type::Generic("HashMap".to_string(), vec![key_type, value_type]));
+        }
+        
+        // 空のマップの場合、エラー
+        Err(AnalysisError::InvalidOperation {
+            message: "Cannot infer type for empty map literal without type annotation".to_string(),
+            span: map.span,
+        })
+    }
+    
+//     // 以下は削除される古い関数
+//     fn analyze_initializer_expression(&mut self, init_expr: &InitializerExpr, _expected_type: Option<&Type>) -> AnalysisResult<Type> {
+//         match &init_expr.constructor {
+//             InitializerConstructor::Type { name, type_args } => {
+//                 // 構造体の初期化
+//                 if self.type_checker.has_type(name) {
+//                     // 既存の構造体リテラルとして変換
+//                     let mut fields = Vec::new();
+//                     for element in &init_expr.elements {
+//                         match element {
+//                             InitializerElement::Named { name, value } => {
+//                                 fields.push(StructFieldInit {
+//                                     name: name.clone(),
+//                                     value: value.clone(),
+//                                 });
+//                             }
+//                             _ => {
+//                                 return Err(AnalysisError::InvalidOperation {
+//                                     message: format!("Expected named field initialization for struct {}, found positional or key-value initialization", name),
+//                                     span: init_expr.span,
+//                                 });
+//                             }
+//                         }
+//                     }
+//                     
+//                     let struct_lit = StructLiteral {
+//                         name: name.clone(),
+//                         fields,
+//                         span: init_expr.span,
+//                     };
+//                     
+//                     self.analyze_struct_literal(&struct_lit)
+//                 } 
+//                 // 標準ライブラリ型の初期化
+//                 else if name == "Vec" {
+//                     // Vec<T>の初期化
+//                     if type_args.len() != 1 {
+//                         return Err(AnalysisError::InvalidOperation {
+//                             message: format!("Vec requires exactly one type argument, found {}", type_args.len()),
+//                             span: init_expr.span,
+//                         });
+//                     }
+//                     
+//                     let element_type = &type_args[0];
+//                     
+//                     // すべての要素の型をチェック
+//                     for element in &init_expr.elements {
+//                         match element {
+//                             InitializerElement::Positional(expr) => {
+//                                 let elem_type = self.analyze_expression(expr)?;
+//                                 self.type_checker.check_type_compatibility(element_type, &elem_type, expr.span())?;
+//                             }
+//                             _ => {
+//                                 return Err(AnalysisError::InvalidOperation {
+//                                     message: "Vec initialization requires positional elements".to_string(),
+//                                     span: init_expr.span,
+//                                 });
+//                             }
+//                         }
+//                     }
+//                     
+//                     // Vec<T>型を返す
+//                     Ok(Type::Generic("Vec".to_string(), type_args.clone()))
+//                 }
+//                 else if name == "HashMap" {
+//                     // HashMap<K, V>の初期化
+//                     if type_args.len() != 2 {
+//                         return Err(AnalysisError::InvalidOperation {
+//                             message: format!("HashMap requires exactly two type arguments, found {}", type_args.len()),
+//                             span: init_expr.span,
+//                         });
+//                     }
+//                     
+//                     let key_type = &type_args[0];
+//                     let value_type = &type_args[1];
+//                     
+//                     // すべての要素の型をチェック
+//                     for element in &init_expr.elements {
+//                         match element {
+//                             InitializerElement::KeyValue { key, value } => {
+//                                 let k_type = self.analyze_expression(key)?;
+//                                 let v_type = self.analyze_expression(value)?;
+//                                 self.type_checker.check_type_compatibility(key_type, &k_type, key.span())?;
+//                                 self.type_checker.check_type_compatibility(value_type, &v_type, value.span())?;
+//                             }
+//                             _ => {
+//                                 return Err(AnalysisError::InvalidOperation {
+//                                     message: "HashMap initialization requires key-value pairs".to_string(),
+//                                     span: init_expr.span,
+//                                 });
+//                             }
+//                         }
+//                     }
+//                     
+//                     // HashMap<K, V>型を返す
+//                     Ok(Type::Generic("HashMap".to_string(), type_args.clone()))
+//                 }
+//                 else if name == "Some" || name == "Ok" || name == "Err" {
+//                     // Option/Result型のバリアント
+//                     if init_expr.elements.len() != 1 {
+//                         return Err(AnalysisError::InvalidOperation {
+//                             message: format!("{} requires exactly one argument", name),
+//                             span: init_expr.span,
+//                         });
+//                     }
+//                     
+//                     match &init_expr.elements[0] {
+//                         InitializerElement::Positional(expr) => {
+//                             let inner_type = self.analyze_expression(expr)?;
+//                             
+//                             // 型を推論
+//                             match name.as_str() {
+//                                 "Some" => Ok(Type::Generic("Option".to_string(), vec![inner_type])),
+//                                 "Ok" => {
+//                                     // Result<T, E>の場合、エラー型は推論できないのでプレースホルダを使用
+//                                     // TODO: より良い型推論
+//                                     Ok(Type::Generic("Result".to_string(), vec![inner_type, Type::Variable("E".to_string())]))
+//                                 }
+//                                 "Err" => {
+//                                     // Result<T, E>の場合、成功型は推論できないのでプレースホルダを使用
+//                                     Ok(Type::Generic("Result".to_string(), vec![Type::Variable("T".to_string()), inner_type]))
+//                                 }
+//                                 _ => unreachable!()
+//                             }
+//                         }
+//                         InitializerElement::Named { name: field_name, value } => {
+//                             // Ok { value: 42 } のような名前付き初期化もサポート
+//                             if field_name == "value" && name == "Ok" {
+//                                 let inner_type = self.analyze_expression(value)?;
+//                                 Ok(Type::Generic("Result".to_string(), vec![inner_type, Type::Variable("E".to_string())]))
+//                             } else {
+//                                 Err(AnalysisError::InvalidOperation {
+//                                     message: format!("Invalid field name '{}' for {}", field_name, name),
+//                                     span: init_expr.span,
+//                                 })
+//                             }
+//                         }
+//                         _ => {
+//                             Err(AnalysisError::InvalidOperation {
+//                                 message: format!("{} initialization requires a single positional argument", name),
+//                                 span: init_expr.span,
+//                             })
+//                         }
+//                     }
+//                 }
+//                 else if name == "None" {
+//                     // Noneは引数なし
+//                     if !init_expr.elements.is_empty() {
+//                         return Err(AnalysisError::InvalidOperation {
+//                             message: "None takes no arguments".to_string(),
+//                             span: init_expr.span,
+//                         });
+//                     }
+//                     
+//                     // Option<T>型を返す（Tは推論される必要がある）
+//                     Ok(Type::Generic("Option".to_string(), vec![Type::Variable("T".to_string())]))
+//                 }
+//                 else {
+//                     // 未定義の型
+//                     Err(AnalysisError::UndefinedType {
+//                         name: name.clone(),
+//                         span: init_expr.span,
+//                     })
+//                 }
+//             }
+//             InitializerConstructor::Expression(_) => {
+//                 // TODO: 式コンストラクタの実装
+//                 Err(AnalysisError::InvalidOperation {
+//                     message: "Expression constructors are not yet implemented".to_string(),
+//                     span: init_expr.span,
+//                 })
+//             }
+//         }
+//     }
 }

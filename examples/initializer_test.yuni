@@ -1,0 +1,27 @@
+package main
+
+fn main() {
+    // 構造体の初期化（既存の構文）
+    let p1 = Point { x: 10, y: 20 };
+    
+    // ジェネリック型の初期化（新しい構文）
+    let v1 = Vec<i32> { 1, 2, 3, 4, 5 };
+    
+    // HashMap の初期化（キー・バリュー形式）
+    let m1 = HashMap<String, i32> { "a": 1, "b": 2, "c": 3 };
+    
+    // 空の初期化
+    let v2 = Vec<String> { };
+    
+    // ネストした初期化
+    let v3 = Vec<Vec<i32>> {
+        Vec<i32> { 1, 2, 3 },
+        Vec<i32> { 4, 5, 6 },
+        Vec<i32> { 7, 8, 9 }
+    };
+}
+
+type Point struct {
+    x: i32,
+    y: i32,
+}

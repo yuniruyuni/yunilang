@@ -2,6 +2,7 @@
 
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
+use inkwell::types::FunctionType;
 use inkwell::values::FunctionValue;
 use inkwell::AddressSpace;
 use std::collections::HashMap;
@@ -189,6 +190,18 @@ impl<'ctx> RuntimeManager<'ctx> {
     /// ランタイム関数を取得
     pub fn get_function(&self, name: &str) -> Option<FunctionValue<'ctx>> {
         self.functions.get(name).copied()
+    }
+    
+    /// ランタイム関数を取得または宣言
+    pub fn get_or_declare_function(&mut self, name: &str, fn_type: FunctionType<'ctx>, module: &Module<'ctx>) -> crate::error::YuniResult<FunctionValue<'ctx>> {
+        if let Some(func) = self.functions.get(name) {
+            Ok(*func)
+        } else {
+            // 関数が存在しない場合は宣言する
+            let func = module.add_function(name, fn_type, Some(Linkage::External));
+            self.functions.insert(name.to_string(), func);
+            Ok(func)
+        }
     }
     
     /// 新しいランタイム関数を追加

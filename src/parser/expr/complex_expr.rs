@@ -4,6 +4,113 @@
 
 
 impl Parser {
+    /// 初期化式を解析（型名 { ... } の形式）
+    pub(crate) fn parse_initializer_expr(&mut self, name: String, type_args: Vec<Type>) -> ParseResult<Expression> {
+        let start = self.current_span().start - name.len();
+        self.expect(Token::LeftBrace)?;
+        
+        // 空の初期化リストをチェック
+        if self.check(&Token::RightBrace) {
+            self.advance();
+            let span = self.span_from(start);
+            
+            // 空の構造体の場合（型引数がない場合は構造体の可能性が高い）
+            if type_args.is_empty() {
+                return Ok(Expression::StructLit(StructLiteral {
+                    name: Some(name),
+                    fields: vec![],
+                    span,
+                }));
+            }
+            
+            // 空のマップ初期化子
+            return Ok(Expression::MapLiteral(MapLiteral {
+                type_name: Some((name, type_args)),
+                pairs: vec![],
+                span,
+            }));
+        }
+        
+        // 最初の要素を見て、初期化子の種類を判定
+        let is_named_field = if self.check_identifier() {
+            let saved_pos = self.current;
+            let _field_name = self.expect_identifier()?;
+            let result = self.check(&Token::Colon);
+            self.current = saved_pos; // 位置を戻す
+            result
+        } else {
+            false
+        };
+        
+        let is_key_value = if !is_named_field && matches!(self.current_token(), Some(Token::String(_))) {
+            let saved_pos = self.current;
+            let _key = self.parse_expression_internal()?;
+            let result = self.check(&Token::Colon);
+            self.current = saved_pos; // 位置を戻す
+            result
+        } else {
+            false
+        };
+        
+        // 構造体リテラル（名前付きフィールド）
+        if is_named_field {
+            let mut fields = Vec::new();
+            
+            while !self.check(&Token::RightBrace) && !self.is_at_end() {
+                let field_name = self.expect_identifier()?;
+                self.expect(Token::Colon)?;
+                let value = self.parse_expression_internal()?;
+                
+                fields.push(StructFieldInit {
+                    name: field_name,
+                    value,
+                });
+                
+                if !self.check(&Token::RightBrace) {
+                    self.expect(Token::Comma)?;
+                }
+            }
+            
+            self.expect(Token::RightBrace)?;
+            let span = self.span_from(start);
+            
+            return Ok(Expression::StructLit(StructLiteral {
+                name: Some(name),
+                fields,
+                span,
+            }));
+        }
+        
+        // マップリテラル（キー・バリュー形式）
+        if is_key_value {
+            let mut pairs = Vec::new();
+            
+            while !self.check(&Token::RightBrace) && !self.is_at_end() {
+                let key = self.parse_expression_internal()?;
+                self.expect(Token::Colon)?;
+                let value = self.parse_expression_internal()?;
+                
+                pairs.push((key, value));
+                
+                if !self.check(&Token::RightBrace) {
+                    self.expect(Token::Comma)?;
+                }
+            }
+            
+            self.expect(Token::RightBrace)?;
+            let span = self.span_from(start);
+            
+            return Ok(Expression::MapLiteral(MapLiteral {
+                type_name: Some((name, type_args)),
+                pairs,
+                span,
+            }));
+        }
+        
+        // それ以外はエラー（リストリテラルは [] で解析されるため、ここには来ない）
+        Err(self.error(format!("Invalid initializer syntax for type {}", name)))
+    }
+
     /// 構造体リテラルを解析
     pub(crate) fn parse_struct_literal(&mut self, name: String) -> ParseResult<Expression> {
         let start = self.current_span().start - name.len();
@@ -34,7 +141,7 @@ impl Parser {
         let span = self.span_from(start);
         
         Ok(Expression::StructLit(StructLiteral {
-            name,
+            name: Some(name),
             fields,
             span,
         }))

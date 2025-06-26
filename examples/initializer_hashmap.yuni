@@ -1,0 +1,13 @@
+package main
+
+fn main() {
+    // HashMap の初期化
+    let m1 = HashMap<String, i32> { 
+        "apple": 100,
+        "banana": 200,
+        "orange": 150
+    };
+    
+    // 空のHashMap
+    let m2 = HashMap<i32, String> { };
+}

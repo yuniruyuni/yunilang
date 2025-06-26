@@ -199,14 +199,16 @@ impl Monomorphizer {
                 
                 // ジェネリック構造体の場合、単相化された名前に置き換える
                 let mut new_name = struct_lit.name.clone();
-                if self.generic_structs.contains_key(&struct_lit.name) {
-                    // 型引数を推論
-                    let type_args = self.infer_type_args_from_struct_lit(struct_lit)?;
-                    if !type_args.is_empty() {
-                        // インスタンス化をキューに追加
-                        self.queue_instantiation(&struct_lit.name, type_args.clone(), InstantiationType::Struct);
-                        // マングルされた名前に置き換え
-                        new_name = crate::analyzer::monomorphization::mangling::mangle_struct_name(&struct_lit.name, &type_args);
+                if let Some(name) = &struct_lit.name {
+                    if self.generic_structs.contains_key(name) {
+                        // 型引数を推論
+                        let type_args = self.infer_type_args_from_struct_lit(struct_lit)?;
+                        if !type_args.is_empty() {
+                            // インスタンス化をキューに追加
+                            self.queue_instantiation(name, type_args.clone(), InstantiationType::Struct);
+                            // マングルされた名前に置き換え
+                            new_name = Some(crate::analyzer::monomorphization::mangling::mangle_struct_name(name, &type_args));
+                        }
                     }
                 }
                 
@@ -353,6 +355,31 @@ impl Monomorphizer {
                 Ok(Expression::Dereference(DereferenceExpr {
                     expr: Box::new(new_expr),
                     span: deref.span,
+                }))
+            }
+            Expression::ListLiteral(list) => {
+                let mut new_elements = Vec::new();
+                for elem in &list.elements {
+                    new_elements.push(self.substitute_expr(elem, type_map)?);
+                }
+                Ok(Expression::ListLiteral(ListLiteral {
+                    type_name: list.type_name.clone(),
+                    elements: new_elements,
+                    span: list.span,
+                }))
+            }
+            Expression::MapLiteral(map) => {
+                let mut new_pairs = Vec::new();
+                for (key, value) in &map.pairs {
+                    new_pairs.push((
+                        self.substitute_expr(key, type_map)?,
+                        self.substitute_expr(value, type_map)?,
+                    ));
+                }
+                Ok(Expression::MapLiteral(MapLiteral {
+                    type_name: map.type_name.clone(),
+                    pairs: new_pairs,
+                    span: map.span,
                 }))
             }
             // リテラルや識別子はそのまま

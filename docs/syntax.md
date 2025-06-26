@@ -95,6 +95,19 @@ let floats: [f64] = [1.0, 2.0, 3.0];
 let empty: [i32] = [];
 ```
 
+### コレクション型
+
+```yuni
+// ベクター（動的配列）
+let vec = Vec<i32> [1, 2, 3, 4, 5];
+
+// ハッシュマップ
+let scores = HashMap<String, i32> {
+    "Alice": 95,
+    "Bob": 87
+};
+```
+
 #### タプル
 
 ```yuni
@@ -128,7 +141,7 @@ type Person struct {
     is_student: bool
 }
 
-// 構造体リテラル
+// 構造体の初期化
 let p = Point { x: 3.0, y: 4.0 };
 let person = Person { 
     name: "Alice", 
@@ -525,6 +538,41 @@ println("x: ", x, ", y: ", y); // 変数と文字列の混合
 fn add(a: i32, b: i32): i32 {
     return a + b;
 }
+```
+
+## 初期化子構文
+
+詳細な初期化子の仕様については[initializers.md](./initializers.md)を参照してください。
+
+### 基本的な初期化子
+
+```yuni
+// リスト初期化子（角括弧）
+let vec = Vec<i32> [1, 2, 3, 4, 5];
+
+// マップ初期化子（波括弧）
+let map = HashMap<String, i32> {
+    "key1": 100,
+    "key2": 200
+};
+
+// 構造体初期化子（波括弧）
+let point = Point { x: 10.0, y: 20.0 };
+
+// Enum初期化子（関数呼び出し形式）
+let opt = Some(42);
+let res = Ok("success");
+```
+
+### 暗黙的な初期化子変換
+
+```yuni
+fn process_point(p: Point) {
+    // ...
+}
+
+// 型名なしで初期化子を渡す
+process_point({ x: 10.0, y: 20.0 });
 ```
 
 ## ベストプラクティス

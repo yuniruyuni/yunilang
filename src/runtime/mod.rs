@@ -3,7 +3,9 @@
 //! This module provides runtime functions and utilities that compiled Yuni programs can use.
 
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::{c_char, c_int, c_void};
+use std::ptr;
+use std::alloc::{alloc, dealloc, Layout};
 
 /// Print a string to stdout
 /// 
@@ -253,6 +255,285 @@ pub extern "C" fn yuni_read_line() -> *mut c_char {
 #[no_mangle]
 pub extern "C" fn yuni_exit(code: c_int) {
     std::process::exit(code);
+}
+
+// ========== Vec ランタイム関数 ==========
+
+/// Vec構造体の表現
+#[repr(C)]
+pub struct YuniVec {
+    data: *mut c_void,
+    len: usize,
+    capacity: usize,
+    element_size: usize,
+}
+
+/// 新しいVecを作成
+/// 
+/// # Safety
+/// element_sizeは正の値である必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_vec_new(element_size: usize) -> *mut YuniVec {
+    let vec = Box::new(YuniVec {
+        data: ptr::null_mut(),
+        len: 0,
+        capacity: 0,
+        element_size,
+    });
+    Box::into_raw(vec)
+}
+
+/// Vecに要素を追加
+/// 
+/// # Safety
+/// - vecは有効なYuniVecポインタである必要があります
+/// - elementはelement_sizeバイトの有効なメモリを指している必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_vec_push(vec: *mut YuniVec, element: *const c_void) {
+    if vec.is_null() || element.is_null() {
+        return;
+    }
+    
+    let vec = &mut *vec;
+    
+    // 容量が足りない場合は再割り当て
+    if vec.len >= vec.capacity {
+        let new_capacity = if vec.capacity == 0 { 4 } else { vec.capacity * 2 };
+        let new_layout = Layout::array::<u8>(vec.element_size * new_capacity).unwrap();
+        
+        let new_data = if vec.data.is_null() {
+            alloc(new_layout)
+        } else {
+            let old_layout = Layout::array::<u8>(vec.element_size * vec.capacity).unwrap();
+            std::alloc::realloc(vec.data as *mut u8, old_layout, new_layout.size())
+        };
+        
+        if new_data.is_null() {
+            // アロケーション失敗
+            return;
+        }
+        
+        vec.data = new_data as *mut c_void;
+        vec.capacity = new_capacity;
+    }
+    
+    // 要素をコピー
+    let dst = (vec.data as *mut u8).add(vec.len * vec.element_size);
+    ptr::copy_nonoverlapping(element as *const u8, dst, vec.element_size);
+    vec.len += 1;
+}
+
+/// Vecの要素を取得
+/// 
+/// # Safety
+/// - vecは有効なYuniVecポインタである必要があります
+/// - indexは有効な範囲内である必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_vec_get(vec: *const YuniVec, index: usize) -> *const c_void {
+    if vec.is_null() {
+        return ptr::null();
+    }
+    
+    let vec = &*vec;
+    if index >= vec.len {
+        return ptr::null();
+    }
+    
+    (vec.data as *const u8).add(index * vec.element_size) as *const c_void
+}
+
+/// Vecの長さを取得
+/// 
+/// # Safety
+/// vecは有効なYuniVecポインタである必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_vec_len(vec: *const YuniVec) -> usize {
+    if vec.is_null() {
+        return 0;
+    }
+    (*vec).len
+}
+
+/// Vecを解放
+/// 
+/// # Safety
+/// vecは有効なYuniVecポインタである必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_vec_free(vec: *mut YuniVec) {
+    if vec.is_null() {
+        return;
+    }
+    
+    let vec = Box::from_raw(vec);
+    if !vec.data.is_null() && vec.capacity > 0 {
+        let layout = Layout::array::<u8>(vec.element_size * vec.capacity).unwrap();
+        dealloc(vec.data as *mut u8, layout);
+    }
+    // Boxがドロップされることで、YuniVec自体も解放される
+}
+
+// ========== HashMap ランタイム関数 ==========
+
+/// HashMap構造体の表現（簡易実装）
+#[repr(C)]
+pub struct YuniHashMap {
+    buckets: *mut *mut YuniHashMapBucket,
+    bucket_count: usize,
+    size: usize,
+    key_size: usize,
+    value_size: usize,
+}
+
+#[repr(C)]
+struct YuniHashMapBucket {
+    key: *mut c_void,
+    value: *mut c_void,
+    next: *mut YuniHashMapBucket,
+}
+
+/// 新しいHashMapを作成
+/// 
+/// # Safety
+/// key_sizeとvalue_sizeは正の値である必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_hashmap_new(key_size: usize, value_size: usize) -> *mut YuniHashMap {
+    let initial_capacity = 16;
+    let buckets_size = std::mem::size_of::<*mut YuniHashMapBucket>() * initial_capacity;
+    let buckets = alloc(Layout::from_size_align(buckets_size, 8).unwrap()) as *mut *mut YuniHashMapBucket;
+    
+    // バケットを初期化
+    for i in 0..initial_capacity {
+        *buckets.add(i) = ptr::null_mut();
+    }
+    
+    let hashmap = Box::new(YuniHashMap {
+        buckets,
+        bucket_count: initial_capacity,
+        size: 0,
+        key_size,
+        value_size,
+    });
+    Box::into_raw(hashmap)
+}
+
+/// 簡易ハッシュ関数
+unsafe fn hash_bytes(data: *const c_void, size: usize) -> usize {
+    let bytes = std::slice::from_raw_parts(data as *const u8, size);
+    let mut hash = 0usize;
+    for &byte in bytes {
+        hash = hash.wrapping_mul(31).wrapping_add(byte as usize);
+    }
+    hash
+}
+
+/// HashMapに要素を挿入
+/// 
+/// # Safety
+/// - hashmapは有効なYuniHashMapポインタである必要があります
+/// - keyとvalueは適切なサイズの有効なメモリを指している必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_hashmap_insert(hashmap: *mut YuniHashMap, key: *const c_void, value: *const c_void) {
+    if hashmap.is_null() || key.is_null() || value.is_null() {
+        return;
+    }
+    
+    let hashmap = &mut *hashmap;
+    let hash = hash_bytes(key, hashmap.key_size);
+    let bucket_index = hash % hashmap.bucket_count;
+    
+    // 新しいバケットエントリを作成
+    let new_bucket = alloc(Layout::new::<YuniHashMapBucket>()) as *mut YuniHashMapBucket;
+    let key_mem = alloc(Layout::from_size_align(hashmap.key_size, 8).unwrap());
+    let value_mem = alloc(Layout::from_size_align(hashmap.value_size, 8).unwrap());
+    
+    ptr::copy_nonoverlapping(key as *const u8, key_mem, hashmap.key_size);
+    ptr::copy_nonoverlapping(value as *const u8, value_mem, hashmap.value_size);
+    
+    (*new_bucket).key = key_mem as *mut c_void;
+    (*new_bucket).value = value_mem as *mut c_void;
+    (*new_bucket).next = *hashmap.buckets.add(bucket_index);
+    
+    *hashmap.buckets.add(bucket_index) = new_bucket;
+    hashmap.size += 1;
+}
+
+/// HashMapから要素を取得
+/// 
+/// # Safety
+/// - hashmapは有効なYuniHashMapポインタである必要があります
+/// - keyは適切なサイズの有効なメモリを指している必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_hashmap_get(hashmap: *const YuniHashMap, key: *const c_void) -> *const c_void {
+    if hashmap.is_null() || key.is_null() {
+        return ptr::null();
+    }
+    
+    let hashmap = &*hashmap;
+    let hash = hash_bytes(key, hashmap.key_size);
+    let bucket_index = hash % hashmap.bucket_count;
+    
+    let mut current = *hashmap.buckets.add(bucket_index);
+    while !current.is_null() {
+        // キーを比較
+        let key_bytes = std::slice::from_raw_parts(key as *const u8, hashmap.key_size);
+        let bucket_key_bytes = std::slice::from_raw_parts((*current).key as *const u8, hashmap.key_size);
+        
+        if key_bytes == bucket_key_bytes {
+            return (*current).value;
+        }
+        
+        current = (*current).next;
+    }
+    
+    ptr::null()
+}
+
+/// HashMapのサイズを取得
+/// 
+/// # Safety
+/// hashmapは有効なYuniHashMapポインタである必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_hashmap_len(hashmap: *const YuniHashMap) -> usize {
+    if hashmap.is_null() {
+        return 0;
+    }
+    (*hashmap).size
+}
+
+/// HashMapを解放
+/// 
+/// # Safety
+/// hashmapは有効なYuniHashMapポインタである必要があります
+#[no_mangle]
+pub unsafe extern "C" fn yuni_hashmap_free(hashmap: *mut YuniHashMap) {
+    if hashmap.is_null() {
+        return;
+    }
+    
+    let hashmap = Box::from_raw(hashmap);
+    
+    // すべてのバケットを解放
+    for i in 0..hashmap.bucket_count {
+        let mut current = *hashmap.buckets.add(i);
+        while !current.is_null() {
+            let next = (*current).next;
+            
+            // キーと値のメモリを解放
+            dealloc((*current).key as *mut u8, Layout::from_size_align(hashmap.key_size, 8).unwrap());
+            dealloc((*current).value as *mut u8, Layout::from_size_align(hashmap.value_size, 8).unwrap());
+            
+            // バケット自体を解放
+            dealloc(current as *mut u8, Layout::new::<YuniHashMapBucket>());
+            
+            current = next;
+        }
+    }
+    
+    // バケット配列を解放
+    let buckets_size = std::mem::size_of::<*mut YuniHashMapBucket>() * hashmap.bucket_count;
+    dealloc(hashmap.buckets as *mut u8, Layout::from_size_align(buckets_size, 8).unwrap());
+    
+    // YuniHashMap自体はBoxがドロップされることで解放される
 }
 
 /// Panic handler

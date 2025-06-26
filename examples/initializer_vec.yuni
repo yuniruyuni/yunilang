@@ -1,0 +1,17 @@
+package main
+
+fn main() {
+    // Vec の初期化
+    let v1 = Vec<i32> { 1, 2, 3, 4, 5 };
+    
+    // 空のVec
+    let v2 = Vec<String> { };
+    
+    // Option の初期化
+    let opt1 = Some<i32> { 42 };
+    let opt2 = None<String> { };
+    
+    // Result の初期化
+    let res1 = Ok<i32> { 100 };
+    let res2 = Err<String> { "error message" };
+}

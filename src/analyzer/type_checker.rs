@@ -99,6 +99,11 @@ impl TypeChecker {
         Ok(())
     }
     
+    /// 型が登録されているかチェック
+    pub fn has_type(&self, name: &str) -> bool {
+        self.types.contains_key(name)
+    }
+    
     /// 関数シグネチャを登録
     pub fn register_function(&mut self, func_sig: FunctionSignature) -> AnalysisResult<()> {
         if self.functions.contains_key(&func_sig.name) {

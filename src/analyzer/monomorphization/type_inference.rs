@@ -100,7 +100,7 @@ impl Monomorphizer {
             Expression::Boolean(_) => Some(Type::Bool),
             Expression::StructLit(struct_lit) => {
                 // 構造体リテラルの型を推論
-                Some(Type::UserDefined(struct_lit.name.clone()))
+                struct_lit.name.as_ref().map(|name| Type::UserDefined(name.clone()))
             }
             Expression::Field(field_expr) => {
                 // フィールドアクセスの型推論
@@ -122,6 +122,29 @@ impl Monomorphizer {
                 array_expr.elements.first()
                     .and_then(|first_elem| self.infer_expr_type(first_elem))
                     .map(|elem_type| Type::Array(Box::new(elem_type)))
+            }
+            Expression::ListLiteral(list) => {
+                // リストリテラルの型を推論
+                if let Some((name, type_args)) = &list.type_name {
+                    Some(Type::Generic(name.clone(), type_args.clone()))
+                } else if let Some(first_elem) = list.elements.first() {
+                    self.infer_expr_type(first_elem)
+                        .map(|elem_type| Type::Generic("Vec".to_string(), vec![elem_type]))
+                } else {
+                    None
+                }
+            }
+            Expression::MapLiteral(map) => {
+                // マップリテラルの型を推論
+                if let Some((name, type_args)) = &map.type_name {
+                    Some(Type::Generic(name.clone(), type_args.clone()))
+                } else if let Some((key, value)) = map.pairs.first() {
+                    let key_type = self.infer_expr_type(key)?;
+                    let value_type = self.infer_expr_type(value)?;
+                    Some(Type::Generic("HashMap".to_string(), vec![key_type, value_type]))
+                } else {
+                    None
+                }
             }
             _ => None,
         }

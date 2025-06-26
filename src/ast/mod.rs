@@ -28,7 +28,7 @@ pub use declarations::{
 pub use expressions::{
     ArrayExpr, AssignmentExpr, BinaryExpr, BinaryOp, BlockExpr, BooleanLit, CallExpr, CastExpr,
     DereferenceExpr, EnumVariantExpr, EnumVariantFields, Expression, FieldExpr, FloatLit, Identifier, IfExpr, IndexExpr,
-    IntegerLit, MatchArm, MatchExpr, MethodCallExpr, PathExpr, ReferenceExpr, StringLit,
+    IntegerLit, ListLiteral, MapLiteral, MatchArm, MatchExpr, MethodCallExpr, PathExpr, ReferenceExpr, StringLit,
     StructFieldInit, StructLiteral, TemplateStringLit, TemplateStringPart, TupleExpr, UnaryExpr,
     UnaryOp,
 };

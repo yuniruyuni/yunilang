@@ -138,6 +138,8 @@ fn main() -> YuniResult<()> {
 
     if let Err(e) = result {
         eprintln!("{}: {}", "error".red().bold(), e);
+        // Debug情報を表示
+        eprintln!("{:?}", e);
         std::process::exit(1);
     }
 

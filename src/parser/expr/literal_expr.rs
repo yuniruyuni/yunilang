@@ -93,7 +93,7 @@ impl Parser {
         Ok(Expression::Boolean(BooleanLit { value, span: span.into() }))
     }
 
-    /// 識別子式を解析（パス、構造体リテラルを含む）
+    /// 識別子式を解析（パス、初期化式を含む）
     fn parse_identifier_expression(&mut self, name: String) -> ParseResult<Expression> {
         let span = self.current_span();
         self.advance();
@@ -103,10 +103,10 @@ impl Parser {
             return self.parse_path_expression(name, span.into());
         }
         
-        // 構造体リテラルの場合
-        // ただし、識別子が小文字で始まる場合（変数名）は構造体リテラルとして扱わない
+        // 初期化式の場合（型名の後の波括弧）
+        // ただし、識別子が小文字で始まる場合（変数名）は初期化式として扱わない
         if self.check(&Token::LeftBrace) && name.chars().next().unwrap_or('a').is_uppercase() {
-            return self.parse_struct_literal(name);
+            return self.parse_initializer_expr(name, vec![]);
         }
         
         Ok(Expression::Identifier(Identifier { name, span: span.into() }))
@@ -147,10 +147,10 @@ impl Parser {
         }
     }
 
-    /// 配列リテラルを解析
+    /// 配列リテラルを解析（リストリテラルとして）
     fn parse_array_literal(&mut self) -> ParseResult<Expression> {
         let start = self.current_span().start;
-        self.advance();
+        self.advance(); // '[' をスキップ
         let mut elements = Vec::new();
         
         while !self.check(&Token::RightBracket) && !self.is_at_end() {
@@ -162,20 +162,109 @@ impl Parser {
         
         self.expect(Token::RightBracket)?;
         let span = self.span_from(start);
-        Ok(Expression::Array(ArrayExpr { elements, span }))
+        
+        // 新しいListLiteral式として返す（型名なし）
+        Ok(Expression::ListLiteral(ListLiteral { 
+            type_name: None,
+            elements, 
+            span 
+        }))
     }
 
     /// ブロック式を解析（プライマリ式として）
     fn parse_block_expression_primary(&mut self) -> ParseResult<Expression> {
         let start = self.current_span().start;
-        let (statements, last_expr) = self.parse_block_expression()?;
-        let span = self.span_from(start);
         
-        Ok(Expression::Block(BlockExpr {
-            statements,
-            last_expr,
-            span,
-        }))
+        // 匿名構造体リテラルまたはマップリテラルの可能性をチェック
+        if self.is_anonymous_struct_or_map_literal() {
+            self.advance(); // '{' をスキップ
+            
+            // 空の場合
+            if self.check(&Token::RightBrace) {
+                self.advance();
+                let span = self.span_from(start);
+                // デフォルトで空の構造体リテラルとして扱う
+                return Ok(Expression::StructLit(StructLiteral {
+                    name: None,
+                    fields: vec![],
+                    span,
+                }));
+            }
+            
+            // 最初の要素を見て判別
+            let is_struct_literal = if self.check_identifier() {
+                let saved_pos = self.current;
+                let _field = self.expect_identifier()?;
+                let result = self.check(&Token::Colon);
+                self.current = saved_pos; // 位置を戻す
+                result
+            } else {
+                false
+            };
+            
+            if is_struct_literal {
+                // 匿名構造体リテラル
+                let mut fields = Vec::new();
+                
+                while !self.check(&Token::RightBrace) && !self.is_at_end() {
+                    let field_name = self.expect_identifier()?;
+                    self.expect(Token::Colon)?;
+                    let value = self.parse_expression_internal()?;
+                    
+                    fields.push(StructFieldInit {
+                        name: field_name,
+                        value,
+                    });
+                    
+                    if !self.check(&Token::RightBrace) {
+                        self.expect(Token::Comma)?;
+                    }
+                }
+                
+                self.expect(Token::RightBrace)?;
+                let span = self.span_from(start);
+                
+                Ok(Expression::StructLit(StructLiteral {
+                    name: None,
+                    fields,
+                    span,
+                }))
+            } else {
+                // マップリテラル
+                let mut pairs = Vec::new();
+                
+                while !self.check(&Token::RightBrace) && !self.is_at_end() {
+                    let key = self.parse_expression_internal()?;
+                    self.expect(Token::Colon)?;
+                    let value = self.parse_expression_internal()?;
+                    
+                    pairs.push((key, value));
+                    
+                    if !self.check(&Token::RightBrace) {
+                        self.expect(Token::Comma)?;
+                    }
+                }
+                
+                self.expect(Token::RightBrace)?;
+                let span = self.span_from(start);
+                
+                Ok(Expression::MapLiteral(MapLiteral {
+                    type_name: None,
+                    pairs,
+                    span,
+                }))
+            }
+        } else {
+            // 通常のブロック式
+            let (statements, last_expr) = self.parse_block_expression()?;
+            let span = self.span_from(start);
+            
+            Ok(Expression::Block(BlockExpr {
+                statements,
+                last_expr,
+                span,
+            }))
+        }
     }
 
     /// テンプレート文字列を解析
@@ -254,5 +343,36 @@ impl Parser {
             parts, 
             span: span.into() 
         }))
+    }
+    
+    /// 匿名構造体リテラルまたはマップリテラルかを先読みで判別
+    fn is_anonymous_struct_or_map_literal(&self) -> bool {
+        // 現在のトークンが '{' であることを確認
+        if !self.check(&Token::LeftBrace) {
+            return false;
+        }
+        
+        // 空のブレースの場合
+        if let Some(Token::RightBrace) = self.peek(1) {
+            return true;
+        }
+        
+        // 構造体リテラルパターン: { identifier : ...
+        if let Some(Token::Identifier(_)) = self.peek(1) {
+            if let Some(Token::Colon) = self.peek(2) {
+                return true;
+            }
+        }
+        
+        // マップリテラルパターン: { "string" : ... または { expr : ...
+        // この場合、詳細な判別は難しいが、通常のブロック式と区別するために
+        // コロンがあるかどうかをチェックする
+        if let Some(Token::String(_)) = self.peek(1) {
+            if let Some(Token::Colon) = self.peek(2) {
+                return true;
+            }
+        }
+        
+        false
     }
 }

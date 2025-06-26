@@ -137,6 +137,14 @@ impl Parser {
 
     /// 特定のトークンを期待
     pub(super) fn expect(&mut self, token_type: Token) -> ParseResult<()> {
+        // >> を > として扱う特殊処理
+        if token_type == Token::Gt && self.check(&Token::GtGt) {
+            // >>の一部として>を消費したことにする
+            // TODO: より適切な実装が必要
+            self.advance();
+            return Ok(());
+        }
+        
         if self.check(&token_type) {
             self.advance();
             Ok(())
@@ -159,6 +167,11 @@ impl Parser {
             }
             _ => Err(self.error("Expected identifier".to_string())),
         }
+    }
+    
+    /// 識別子かチェック（進まない）
+    pub(super) fn check_identifier(&self) -> bool {
+        matches!(self.current_token(), Some(Token::Identifier(_)))
     }
 
     /// 文字列リテラルを期待

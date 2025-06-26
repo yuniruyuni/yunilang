@@ -49,6 +49,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Match(match_expr) => self.compile_match_expr(match_expr),
             Expression::If(if_expr) => self.compile_if_expr(if_expr),
             Expression::Block(block_expr) => self.compile_block_expr(block_expr),
+            Expression::ListLiteral(list) => self.compile_list_literal(list),
+            Expression::MapLiteral(map) => self.compile_map_literal(map),
         }
     }
 }

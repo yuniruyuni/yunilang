@@ -39,6 +39,11 @@ impl<'ctx> TypeManager<'ctx> {
         self.types.get(name).copied()
     }
     
+    /// 構造体型が存在するかチェック
+    pub fn has_struct(&self, name: &str) -> bool {
+        self.types.contains_key(name)
+    }
+    
     /// Enum型を登録（i32として表現）
     pub fn register_enum(&mut self, name: String, enum_type: inkwell::types::IntType<'ctx>) {
         self.enum_types.insert(name, enum_type.into());
@@ -133,10 +138,23 @@ impl<'ctx> TypeManager<'ctx> {
                     span: crate::ast::Span::dummy(),
                 }))
             }
-            Type::Variable(_) | Type::Generic(_, _) => {
-                // ジェネリック型は具体化されるまでコード生成できない
+            Type::Generic(name, _type_args) => {
+                // 標準ライブラリ型の特別処理
+                if name == "Vec" || name == "HashMap" || name == "Option" || name == "Result" {
+                    // これらはポインタとして表現
+                    Ok(self.context.ptr_type(AddressSpace::default()).into())
+                } else {
+                    // その他のジェネリック型はモノモーファイゼーションが必要
+                    Err(YuniError::Codegen(CodegenError::Unimplemented {
+                        feature: format!("Generic types must be instantiated before code generation: {:?}", ty),
+                        span: crate::ast::Span::dummy(),
+                    }))
+                }
+            }
+            Type::Variable(_) => {
+                // 型変数は具体化されるまでコード生成できない
                 Err(YuniError::Codegen(CodegenError::Unimplemented {
-                    feature: format!("Generic types must be instantiated before code generation: {:?}", ty),
+                    feature: format!("Type variables must be instantiated before code generation: {:?}", ty),
                     span: crate::ast::Span::dummy(),
                 }))
             }

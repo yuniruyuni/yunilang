@@ -385,7 +385,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::StructLit(struct_lit) => {
                 // 構造体リテラルの型は構造体名から決まる
-                Ok(Type::UserDefined(struct_lit.name.clone()))
+                struct_lit.name.as_ref()
+                    .map(|name| Type::UserDefined(name.clone()))
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: "Anonymous struct literal type inference not implemented".to_string(),
+                    }))
             }
             Expression::Field(field_expr) => {
                 // フィールドアクセスの型推論
@@ -563,6 +567,36 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::TemplateString(_) => {
                 // テンプレート文字列の型はString
                 Ok(Type::String)
+            }
+            Expression::ListLiteral(list) => {
+                // リストリテラルの型
+                if let Some((name, type_args)) = &list.type_name {
+                    Ok(Type::Generic(name.clone(), type_args.clone()))
+                } else if !list.elements.is_empty() {
+                    // 要素から型を推論
+                    let elem_type = self.expression_type(&list.elements[0])?;
+                    Ok(Type::Generic("Vec".to_string(), vec![elem_type]))
+                } else {
+                    Err(YuniError::Codegen(CodegenError::Internal {
+                        message: "Cannot infer type for empty list literal".to_string(),
+                    }))
+                }
+            }
+            Expression::MapLiteral(map) => {
+                // マップリテラルの型
+                if let Some((name, type_args)) = &map.type_name {
+                    Ok(Type::Generic(name.clone(), type_args.clone()))
+                } else if !map.pairs.is_empty() {
+                    // 要素から型を推論
+                    let (key, value) = &map.pairs[0];
+                    let key_type = self.expression_type(key)?;
+                    let value_type = self.expression_type(value)?;
+                    Ok(Type::Generic("HashMap".to_string(), vec![key_type, value_type]))
+                } else {
+                    Err(YuniError::Codegen(CodegenError::Internal {
+                        message: "Cannot infer type for empty map literal".to_string(),
+                    }))
+                }
             }
         }
     }

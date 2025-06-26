@@ -31,6 +31,8 @@ pub enum Expression {
     Match(MatchExpr),
     If(IfExpr),
     Block(BlockExpr),
+    ListLiteral(ListLiteral),
+    MapLiteral(MapLiteral),
 }
 
 /// 整数リテラル
@@ -192,7 +194,8 @@ pub struct DereferenceExpr {
 /// 構造体リテラル
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StructLiteral {
-    pub name: String,
+    /// 型名。暗黙的変換の場合はNone
+    pub name: Option<String>,
     pub fields: Vec<StructFieldInit>,
     pub span: Span,
 }
@@ -287,6 +290,26 @@ pub struct BlockExpr {
     pub span: Span,
 }
 
+/// リストリテラル（[1, 2, 3] または Vec<T>[1, 2, 3]）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListLiteral {
+    /// 型名（Vec<T> など）。省略可能
+    pub type_name: Option<(String, Vec<Type>)>,
+    /// 要素
+    pub elements: Vec<Expression>,
+    pub span: Span,
+}
+
+/// マップリテラル（{"key": value} または HashMap<K,V>{...}）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MapLiteral {
+    /// 型名（HashMap<K,V> など）。省略可能
+    pub type_name: Option<(String, Vec<Type>)>,
+    /// キー・バリューペア
+    pub pairs: Vec<(Expression, Expression)>,
+    pub span: Span,
+}
+
 impl Expression {
     /// 式のSpanを取得する
     pub fn span(&self) -> Span {
@@ -315,6 +338,8 @@ impl Expression {
             Expression::Match(match_expr) => match_expr.span,
             Expression::If(if_expr) => if_expr.span,
             Expression::Block(block_expr) => block_expr.span,
+            Expression::ListLiteral(list) => list.span,
+            Expression::MapLiteral(map) => map.span,
         }
     }
 }

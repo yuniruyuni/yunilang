@@ -201,10 +201,10 @@ impl Parser {
         let mut args = Vec::new();
         self.expect(Token::Lt)?;
 
-        while !self.check(&Token::Gt) && !self.is_at_end() {
+        while !self.check(&Token::Gt) && !self.check(&Token::GtGt) && !self.is_at_end() {
             args.push(self.parse_type()?);
 
-            if !self.check(&Token::Gt) {
+            if !self.check(&Token::Gt) && !self.check(&Token::GtGt) {
                 self.expect(Token::Comma)?;
             }
         }

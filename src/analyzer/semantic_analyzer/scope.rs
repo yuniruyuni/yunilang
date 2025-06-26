@@ -77,6 +77,8 @@ impl SemanticAnalyzer {
             Expression::Match(m) => m.span,
             Expression::If(i) => i.span,
             Expression::Block(b) => b.span,
+            Expression::ListLiteral(list) => list.span,
+            Expression::MapLiteral(map) => map.span,
         }
     }
 }
