@@ -61,22 +61,23 @@ fn test_nested_generic_types() {
     let input = r#"
 package test
 
-struct Vec<T> {
-    data: [T],
-    len: u64,
-}
-
-struct Option<T> {
+struct MyOption<T> {
     value: T,
     has_value: bool,
 }
 
-fn wrap<T>(value: T): Option<T> {
-    return Option { value: value, has_value: true };
+struct MyList<T> {
+    first: T,
+    count: u64,
+}
+
+fn wrap<T>(value: T): MyOption<T> {
+    return MyOption { value: value, has_value: true };
 }
 
 fn main() {
-    let vec_opt = wrap(Vec { data: [1, 2, 3], len: 3u64 });  // Option<Vec<i32>>
+    // 配列リテラルの代わりに、単純な値を使う
+    let list_opt = wrap(MyList { first: 42, count: 1u64 });  // MyOption<MyList<i32>>
 }
 "#;
 

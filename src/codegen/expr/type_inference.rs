@@ -479,6 +479,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 match object_type {
                     Type::Array(element_type) => Ok(*element_type),
                     Type::String => Ok(Type::U8), // 文字列の要素はu8（バイト）
+                    Type::Generic(ref name, ref type_args) if name == "Vec" && type_args.len() == 1 => {
+                        Ok(type_args[0].clone())
+                    }
                     _ => Err(YuniError::Codegen(CodegenError::InvalidType {
                         message: format!("Cannot index into type: {:?}", object_type),
                         span: index_expr.span,

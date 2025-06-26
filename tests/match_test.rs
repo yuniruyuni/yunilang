@@ -14,11 +14,11 @@ fn test_match_expr_basic() -> YuniResult<()> {
     let context = Context::create();
     let mut generator = CodeGenerator::new(&context, "test_module");
     
-    // enum宣言を手動で登録（CodeGeneratorには直接的なメソッドがないため）
+    // カスタムEnum宣言を手動で登録（Optionは組み込み型なので別の名前を使用）
     // Enumバリアントを登録
-    generator.enum_variants.insert(("Option".to_string(), "Some".to_string()), 0);
-    generator.enum_variants.insert(("Option".to_string(), "None".to_string()), 1);
-    generator.type_manager.register_enum("Option".to_string(), generator.context.i32_type());
+    generator.enum_variants.insert(("MyOption".to_string(), "MySome".to_string()), 0);
+    generator.enum_variants.insert(("MyOption".to_string(), "MyNone".to_string()), 1);
+    generator.type_manager.register_enum("MyOption".to_string(), generator.context.i32_type());
     
     // main関数を作成
     let main_fn_type = generator.context.i32_type().fn_type(&[], false);
@@ -26,10 +26,10 @@ fn test_match_expr_basic() -> YuniResult<()> {
     let main_bb = generator.context.append_basic_block(main_fn, "entry");
     generator.builder.position_at_end(main_bb);
     
-    // Option::Some(Unit)を作成
+    // MyOption::MySome(Unit)を作成
     let some_variant = Expression::EnumVariant(EnumVariantExpr {
-        enum_name: "Option".to_string(),
-        variant: "Some".to_string(),
+        enum_name: "MyOption".to_string(),
+        variant: "MySome".to_string(),
         fields: EnumVariantFields::Unit,
         span: Span { start: 0, end: 0 },
     });
@@ -40,8 +40,8 @@ fn test_match_expr_basic() -> YuniResult<()> {
         arms: vec![
             MatchArm {
                 pattern: Pattern::EnumVariant {
-                    enum_name: "Option".to_string(),
-                    variant: "Some".to_string(),
+                    enum_name: "MyOption".to_string(),
+                    variant: "MySome".to_string(),
                     fields: EnumVariantPatternFields::Unit,
                 },
                 guard: None,
@@ -53,8 +53,8 @@ fn test_match_expr_basic() -> YuniResult<()> {
             },
             MatchArm {
                 pattern: Pattern::EnumVariant {
-                    enum_name: "Option".to_string(),
-                    variant: "None".to_string(),
+                    enum_name: "MyOption".to_string(),
+                    variant: "MyNone".to_string(),
                     fields: EnumVariantPatternFields::Unit,
                 },
                 guard: None,

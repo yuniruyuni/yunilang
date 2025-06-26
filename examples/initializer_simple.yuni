@@ -5,16 +5,20 @@ package main
 fn main() {
     // リストリテラル（配列風）
     let numbers = [1, 2, 3, 4, 5];
-    let vec = Vec<i32>[10, 20, 30];
     
-    // 構造体リテラル
-    let point = Point { x: 10.0, y: 20.0 };
+    // Vec型の初期化（明示的型指定）
+    let vec1 = Vec<i32>[10, 20, 30];
+    let vec2 = Vec<i32>[40, 50, 60];
     
-    // マップリテラル（将来の実装）
-    // let scores = HashMap<String, i32> {
-    //     "Alice": 95,
-    //     "Bob": 87
-    // };
+    // 構造体リテラル（名前付きフィールド）
+    let point1 = Point { x: 10.0, y: 20.0 };
+    let point2 = Point { x: 5.0, y: 15.0 };
+    
+    // マップリテラル（明示的型指定）
+    let scores1 = HashMap<String, i32>{"Alice": 95, "Bob": 87};
+    let scores2 = HashMap<String, i32>{"Carol": 92, "Dave": 88};
+    
+    println("基本的な初期化子構文のデモ完了");
 }
 
 type Point struct {

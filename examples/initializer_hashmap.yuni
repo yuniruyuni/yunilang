@@ -1,13 +1,29 @@
 package main
 
 fn main() {
-    // HashMap の初期化
-    let m1 = HashMap<String, i32> { 
+    // HashMap の初期化（新しい構文）
+    let m1 = HashMap<String, i32>{ 
         "apple": 100,
         "banana": 200,
         "orange": 150
     };
     
+    let m2 = HashMap<String, i32>{
+        "red": 1,
+        "green": 2,
+        "blue": 3
+    };
+    
     // 空のHashMap
-    let m2 = HashMap<i32, String> { };
+    let m3 = HashMap<i32, String>{};
+    let m4 = HashMap<String, i32>{};
+    
+    // 別のHashMap例
+    let colors = HashMap<String, String>{
+        "red": "rouge",
+        "blue": "bleu", 
+        "green": "vert"
+    };
+    
+    println("HashMapの初期化テスト完了");
 }

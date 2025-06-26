@@ -1,17 +1,20 @@
 package main
 
 fn main() {
-    // Vec の初期化
-    let v1 = Vec<i32> { 1, 2, 3, 4, 5 };
+    // Vec の初期化（新しい構文）
+    let v1 = Vec<i32>[1, 2, 3, 4, 5];
+    let v2 = Vec<i32>[10, 20, 30];
     
     // 空のVec
-    let v2 = Vec<String> { };
+    let v3 = Vec<String>[];
+    let v4 = Vec<i32>[];
     
-    // Option の初期化
-    let opt1 = Some<i32> { 42 };
-    let opt2 = None<String> { };
+    // ネストしたVec（簡単な例）
+    let row1 = Vec<i32>[1, 2, 3];
+    let row2 = Vec<i32>[4, 5, 6];
     
-    // Result の初期化
-    let res1 = Ok<i32> { 100 };
-    let res2 = Err<String> { "error message" };
+    // 文字列のVec
+    let names = Vec<String>["Alice", "Bob", "Carol"];
+    
+    println("Vecの初期化テスト完了");
 }

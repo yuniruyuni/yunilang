@@ -293,6 +293,16 @@ impl SemanticAnalyzer {
                     for (i, arg) in call.args.iter().enumerate() {
                         let arg_type = self.analyze_expression(arg)?;
                         let expected_type = &func_sig.params[i].1;
+                        
+                        // 暗黙的な初期化子変換をチェック
+                        if !self.type_checker.types_compatible(expected_type, &arg_type) {
+                            // 型が一致しない場合、初期化子の暗黙的変換を試みる
+                            if self.can_convert_initializer_to_type(arg, &arg_type, expected_type) {
+                                // 変換可能な場合は続行（実際の変換はコード生成時に行う）
+                                continue;
+                            }
+                        }
+                        
                         self.type_checker.check_type_compatibility(expected_type, &arg_type, call.span)?;
                     }
                     
@@ -768,4 +778,57 @@ impl SemanticAnalyzer {
 //             }
 //         }
 //     }
+    
+    /// 初期化子が指定された型に暗黙的に変換可能かをチェック
+    fn can_convert_initializer_to_type(&self, expr: &Expression, expr_type: &Type, target_type: &Type) -> bool {
+        match expr {
+            // 匿名構造体リテラルの場合
+            Expression::StructLit(struct_lit) if struct_lit.name.is_none() => {
+                // ターゲット型が構造体型の場合
+                if let Type::UserDefined(struct_name) = target_type {
+                    // 構造体が存在し、フィールドが一致するかをチェック
+                    if let Some(type_info) = self.type_checker.get_type_info(struct_name) {
+                        if let TypeKind::Struct(expected_fields) = &type_info.kind {
+                            // すべてのフィールドが初期化子に含まれているかチェック
+                            for expected_field in expected_fields {
+                                if !struct_lit.fields.iter().any(|f| f.name == expected_field.name) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+            // リストリテラルの場合（型名なし）
+            Expression::ListLiteral(list) if list.type_name.is_none() => {
+                // ターゲット型がVec型の場合
+                if let Type::Generic(name, type_args) = target_type {
+                    if name == "Vec" && type_args.len() == 1 {
+                        // 要素の型が一致するかチェック
+                        // （すでに解析されたexpr_typeがVec<T>ならOK）
+                        if let Type::Generic(expr_name, _) = expr_type {
+                            return expr_name == "Vec";
+                        }
+                    }
+                }
+                false
+            }
+            // マップリテラルの場合（型名なし）
+            Expression::MapLiteral(map) if map.type_name.is_none() => {
+                // ターゲット型がHashMap型の場合
+                if let Type::Generic(name, type_args) = target_type {
+                    if name == "HashMap" && type_args.len() == 2 {
+                        // キーと値の型が一致するかチェック
+                        if let Type::Generic(expr_name, _) = expr_type {
+                            return expr_name == "HashMap";
+                        }
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
 }

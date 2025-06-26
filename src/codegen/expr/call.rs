@@ -293,6 +293,22 @@ impl<'ctx> CodeGenerator<'ctx> {
                     span: index.span,
                 }))
             }
+            Type::Generic(name, type_args) if name == "Vec" && type_args.len() == 1 => {
+                // Vecのインデックスアクセス
+                let element_type = &type_args[0];
+                let vec_ptr = object_value.into_pointer_value();
+                
+                // インデックスが整数型であることを確認
+                let index_int = index_value.into_int_value();
+                
+                // 要素のLLVM型を取得
+                let element_llvm_type = self.type_manager.ast_type_to_llvm(element_type)?;
+                
+                // vec_getヘルパー関数を使用
+                let value = self.vec_get(vec_ptr, index_int, element_llvm_type)?;
+                
+                Ok(value)
+            }
             _ => {
                 Err(YuniError::Codegen(CodegenError::InvalidType {
                     message: format!("Cannot index into type: {:?}", object_type),

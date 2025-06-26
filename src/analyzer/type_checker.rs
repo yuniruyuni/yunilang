@@ -56,6 +56,61 @@ impl TypeChecker {
                 },
             );
         }
+        
+        // ジェネリックなビルトイン型を登録
+        // Vec<T>
+        self.types.insert(
+            "Vec".to_string(),
+            TypeInfo {
+                name: "Vec".to_string(),
+                type_params: vec![TypeParam { name: "T".to_string(), span: Span::dummy() }],
+                kind: TypeKind::Builtin,
+                methods: HashMap::new(),
+                span: Span::dummy(),
+            },
+        );
+        
+        // HashMap<K, V>
+        self.types.insert(
+            "HashMap".to_string(),
+            TypeInfo {
+                name: "HashMap".to_string(),
+                type_params: vec![
+                    TypeParam { name: "K".to_string(), span: Span::dummy() },
+                    TypeParam { name: "V".to_string(), span: Span::dummy() }
+                ],
+                kind: TypeKind::Builtin,
+                methods: HashMap::new(),
+                span: Span::dummy(),
+            },
+        );
+        
+        // Option<T>
+        self.types.insert(
+            "Option".to_string(),
+            TypeInfo {
+                name: "Option".to_string(),
+                type_params: vec![TypeParam { name: "T".to_string(), span: Span::dummy() }],
+                kind: TypeKind::Builtin,
+                methods: HashMap::new(),
+                span: Span::dummy(),
+            },
+        );
+        
+        // Result<T, E>
+        self.types.insert(
+            "Result".to_string(),
+            TypeInfo {
+                name: "Result".to_string(),
+                type_params: vec![
+                    TypeParam { name: "T".to_string(), span: Span::dummy() },
+                    TypeParam { name: "E".to_string(), span: Span::dummy() }
+                ],
+                kind: TypeKind::Builtin,
+                methods: HashMap::new(),
+                span: Span::dummy(),
+            },
+        );
     }
     
     /// ビルトイン関数を登録

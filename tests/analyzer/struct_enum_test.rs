@@ -41,7 +41,7 @@ fn test_enum_type_checking() {
         Blue,
     }
     
-    enum Option {
+    enum Maybe {
         Some { value: i32 },
         None,
     }
@@ -58,8 +58,8 @@ fn test_enum_type_checking() {
         let color = Color::Red;
         let name = get_color_name(color);
         
-        let maybe_value = Option::Some { value: 42 };
-        let empty = Option::None;
+        let maybe_value = Maybe::Some { value: 42 };
+        let empty = Maybe::None;
     }
     "#;
     

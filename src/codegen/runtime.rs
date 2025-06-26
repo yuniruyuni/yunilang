@@ -185,6 +185,111 @@ impl<'ctx> RuntimeManager<'ctx> {
             Some(Linkage::External),
         );
         self.functions.insert("yuni_free_string".to_string(), free_string);
+        
+        // Vecランタイム関数
+        // yuni_vec_new(element_size) -> *mut YuniVec
+        let _vec_type = self.context.opaque_struct_type("YuniVec");
+        let vec_ptr_type = self.context.ptr_type(AddressSpace::default());
+        let vec_new_type = vec_ptr_type.fn_type(&[i64_type.into()], false);
+        let vec_new = module.add_function(
+            "yuni_vec_new",
+            vec_new_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_vec_new".to_string(), vec_new);
+        
+        // yuni_vec_push(vec, element)
+        let vec_push_type = void_type.fn_type(&[vec_ptr_type.into(), i8_ptr_type.into()], false);
+        let vec_push = module.add_function(
+            "yuni_vec_push",
+            vec_push_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_vec_push".to_string(), vec_push);
+        
+        // yuni_vec_get(vec, index) -> *const c_void
+        let vec_get_type = i8_ptr_type.fn_type(&[vec_ptr_type.into(), i64_type.into()], false);
+        let vec_get = module.add_function(
+            "yuni_vec_get",
+            vec_get_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_vec_get".to_string(), vec_get);
+        
+        // yuni_vec_len(vec) -> usize
+        let vec_len_type = i64_type.fn_type(&[vec_ptr_type.into()], false);
+        let vec_len = module.add_function(
+            "yuni_vec_len",
+            vec_len_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_vec_len".to_string(), vec_len);
+        
+        // yuni_vec_free(vec)
+        let vec_free_type = void_type.fn_type(&[vec_ptr_type.into()], false);
+        let vec_free = module.add_function(
+            "yuni_vec_free",
+            vec_free_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_vec_free".to_string(), vec_free);
+        
+        // HashMapランタイム関数
+        // yuni_hashmap_new(key_size, value_size) -> *mut YuniHashMap
+        let _hashmap_type = self.context.opaque_struct_type("YuniHashMap");
+        let hashmap_ptr_type = self.context.ptr_type(AddressSpace::default());
+        let hashmap_new_type = hashmap_ptr_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+        let hashmap_new = module.add_function(
+            "yuni_hashmap_new",
+            hashmap_new_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_hashmap_new".to_string(), hashmap_new);
+        
+        // yuni_hashmap_insert(map, key, value)
+        let hashmap_insert_type = void_type.fn_type(&[hashmap_ptr_type.into(), i8_ptr_type.into(), i8_ptr_type.into()], false);
+        let hashmap_insert = module.add_function(
+            "yuni_hashmap_insert",
+            hashmap_insert_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_hashmap_insert".to_string(), hashmap_insert);
+        
+        // yuni_hashmap_get(map, key) -> *const c_void
+        let hashmap_get_type = i8_ptr_type.fn_type(&[hashmap_ptr_type.into(), i8_ptr_type.into()], false);
+        let hashmap_get = module.add_function(
+            "yuni_hashmap_get",
+            hashmap_get_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_hashmap_get".to_string(), hashmap_get);
+        
+        // yuni_hashmap_contains(map, key) -> bool
+        let hashmap_contains_type = bool_type.fn_type(&[hashmap_ptr_type.into(), i8_ptr_type.into()], false);
+        let hashmap_contains = module.add_function(
+            "yuni_hashmap_contains",
+            hashmap_contains_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_hashmap_contains".to_string(), hashmap_contains);
+        
+        // yuni_hashmap_size(map) -> usize
+        let hashmap_size_type = i64_type.fn_type(&[hashmap_ptr_type.into()], false);
+        let hashmap_size = module.add_function(
+            "yuni_hashmap_size",
+            hashmap_size_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_hashmap_size".to_string(), hashmap_size);
+        
+        // yuni_hashmap_free(map)
+        let hashmap_free_type = void_type.fn_type(&[hashmap_ptr_type.into()], false);
+        let hashmap_free = module.add_function(
+            "yuni_hashmap_free",
+            hashmap_free_type,
+            Some(Linkage::External),
+        );
+        self.functions.insert("yuni_hashmap_free".to_string(), hashmap_free);
     }
     
     /// ランタイム関数を取得

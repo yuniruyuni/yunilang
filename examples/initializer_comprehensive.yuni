@@ -1,0 +1,107 @@
+package main
+
+// 新しい初期化子構文の包括的なデモンストレーション
+
+fn main() {
+    println("=== 初期化子構文の包括的デモ ===");
+    
+    // === 1. リストリテラル ===
+    println("1. リストリテラル:");
+    
+    // 基本的なリスト
+    let numbers = [1, 2, 3, 4, 5];
+    let names = ["Alice", "Bob", "Carol"];
+    
+    // 明示的型指定
+    let vec1 = Vec<i32>[10, 20, 30, 40];
+    let vec2 = Vec<String>["Hello", "World"];
+    let vec3 = Vec<f64>[1.5, 2.5, 3.5];
+    
+    // 空のVec
+    let empty_vec = Vec<i32>[];
+    let empty_vec2 = Vec<String>[];
+    
+    // === 2. マップリテラル ===
+    println("2. マップリテラル:");
+    
+    // 明示的型指定
+    let scores = HashMap<String, i32>{
+        "Math": 95,
+        "English": 87,
+        "Science": 92
+    };
+    
+    let ages = HashMap<String, i32>{
+        "Alice": 25,
+        "Bob": 30,
+        "Carol": 28
+    };
+    
+    // 空のHashMap
+    let empty_map = HashMap<String, i32>{};
+    let empty_map2 = HashMap<i32, String>{};
+    
+    // === 3. 構造体リテラル ===
+    println("3. 構造体リテラル:");
+    
+    // 名前付き構造体
+    let point1 = Point { x: 10, y: 20 };
+    let person1 = Person { name: "Alice", age: 25 };
+    let point2 = Point { x: 30, y: 40 };
+    let person2 = Person { name: "Bob", age: 30 };
+    
+    // === 4. 複数要素の初期化 ===
+    println("4. 複数要素の初期化:");
+    
+    // 複数のVec
+    let row1 = Vec<i32>[1, 2, 3];
+    let row2 = Vec<i32>[4, 5, 6];
+    let row3 = Vec<i32>[7, 8, 9];
+    
+    // 複数のHashMap
+    let team_a = HashMap<String, i32>{"Alice": 100, "Bob": 95};
+    let team_b = HashMap<String, i32>{"Carol": 90, "Dave": 85};
+    
+    // 構造体のVec
+    let points = Vec<Point>[
+        Point { x: 0, y: 0 },
+        Point { x: 10, y: 20 },
+        Point { x: 30, y: 40 }
+    ];
+    
+    // === 5. 実用的な例 ===
+    println("5. 実用的な例:");
+    
+    // 学生データ
+    let students = Vec<Student>[
+        Student {
+            name: "Alice",
+            age: 20,
+            scores: HashMap<String, i32>{"Math": 95, "English": 87}
+        },
+        Student {
+            name: "Bob", 
+            age: 21,
+            scores: HashMap<String, i32>{"Math": 88, "English": 92}
+        }
+    ];
+    
+    println("初期化子構文のデモ完了");
+}
+
+// 型定義
+type Point struct {
+    x: i32,
+    y: i32
+}
+
+type Person struct {
+    name: String,
+    age: i32
+}
+
+type Student struct {
+    name: String,
+    age: i32,
+    scores: HashMap<String, i32>
+}

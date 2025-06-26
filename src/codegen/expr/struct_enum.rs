@@ -115,7 +115,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
                     }
                     
-                    Ok(vec_ptr)
+                    Ok(vec_ptr.into())
                 }
                 else if name == "HashMap" {
                     // HashMap<K, V>の初期化
@@ -715,6 +715,25 @@ impl<'ctx> CodeGenerator<'ctx> {
                 
                 Ok(element_ptr.into())
             }
+            Type::Generic(name, type_args) if name == "Vec" && type_args.len() == 1 => {
+                // Vecのインデックスアクセス
+                // Vecの場合、要素は動的にヒープに格納されているため、
+                // 直接的な参照を取ることができない
+                // 一時的な解決策として、要素の値を一時変数に格納してその参照を返す
+                let element_type = &type_args[0];
+                let vec_ptr = object_value.into_pointer_value();
+                let index_int = index_value.into_int_value();
+                let element_llvm_type = self.type_manager.ast_type_to_llvm(element_type)?;
+                
+                // vec_getを使用して要素を取得
+                let value = self.vec_get(vec_ptr, index_int, element_llvm_type)?;
+                
+                // 一時変数に格納
+                let temp_alloca = self.builder.build_alloca(element_llvm_type, "temp_vec_elem")?;
+                self.builder.build_store(temp_alloca, value)?;
+                
+                Ok(temp_alloca.into())
+            }
             _ => {
                 Err(YuniError::Codegen(CodegenError::InvalidType {
                     message: format!("Cannot take reference to index of type: {:?}", object_type),
@@ -725,18 +744,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
     
     /// リストリテラルをコンパイル
-    pub fn compile_list_literal(&mut self, _list: &ListLiteral) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: Vecのランタイム関数を実装後に有効化
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "List literals (Vec runtime functions not yet implemented)".to_string(),
-            span: _list.span,
-        }))
-        /*
+    pub fn compile_list_literal(&mut self, list: &ListLiteral) -> YuniResult<BasicValueEnum<'ctx>> {
         // 型名が指定されている場合
         if let Some((type_name, type_args)) = &list.type_name {
             if type_name == "Vec" && type_args.len() == 1 {
                 let element_type = &type_args[0];
-                let llvm_element_type = self.type_manager.compile_type(element_type)?;
+                let llvm_element_type = self.type_manager.ast_type_to_llvm(element_type)?;
                 
                 // Vecの作成
                 let vec_ptr = self.create_vec_new(llvm_element_type)?;
@@ -747,7 +760,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.vec_push(vec_ptr, value, llvm_element_type)?;
                 }
                 
-                Ok(vec_ptr)
+                Ok(vec_ptr.into())
             } else {
                 Err(YuniError::Codegen(CodegenError::InvalidType {
                     message: format!("Unknown list type: {}", type_name),
@@ -778,27 +791,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.vec_push(vec_ptr, value, element_type)?;
                 }
                 
-                Ok(vec_ptr)
+                Ok(vec_ptr.into())
             }
         }
-        */
     }
     
     /// マップリテラルをコンパイル
-    pub fn compile_map_literal(&mut self, _map: &MapLiteral) -> YuniResult<BasicValueEnum<'ctx>> {
-        // TODO: HashMapのランタイム関数を実装後に有効化
-        Err(YuniError::Codegen(CodegenError::Unimplemented {
-            feature: "Map literals (HashMap runtime functions not yet implemented)".to_string(),
-            span: _map.span,
-        }))
-        /*
+    pub fn compile_map_literal(&mut self, map: &MapLiteral) -> YuniResult<BasicValueEnum<'ctx>> {
         // 型名が指定されている場合
         if let Some((type_name, type_args)) = &map.type_name {
             if type_name == "HashMap" && type_args.len() == 2 {
                 let key_type = &type_args[0];
                 let value_type = &type_args[1];
-                let llvm_key_type = self.type_manager.compile_type(key_type)?;
-                let llvm_value_type = self.type_manager.compile_type(value_type)?;
+                let llvm_key_type = self.type_manager.ast_type_to_llvm(key_type)?;
+                let llvm_value_type = self.type_manager.ast_type_to_llvm(value_type)?;
                 
                 // HashMapの作成
                 let map_ptr = self.create_hashmap_new(llvm_key_type, llvm_value_type)?;
@@ -810,7 +816,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.hashmap_insert(map_ptr, key, value, llvm_key_type, llvm_value_type)?;
                 }
                 
-                Ok(map_ptr)
+                Ok(map_ptr.into())
             } else {
                 Err(YuniError::Codegen(CodegenError::InvalidType {
                     message: format!("Unknown map type: {}", type_name),
@@ -845,9 +851,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.hashmap_insert(map_ptr, key, value, key_type, value_type)?;
                 }
                 
-                Ok(map_ptr)
+                Ok(map_ptr.into())
             }
         }
-        */
     }
 }

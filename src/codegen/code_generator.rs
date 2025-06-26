@@ -7,9 +7,9 @@ use inkwell::context::Context as LLVMContext;
 use inkwell::module::Module;
 use inkwell::passes::PassManager;
 use inkwell::targets::{Target, TargetMachine};
-use inkwell::types::BasicTypeEnum;
-use inkwell::values::FunctionValue;
-use inkwell::OptimizationLevel;
+use inkwell::types::{BasicTypeEnum, BasicType};
+use inkwell::values::{FunctionValue, PointerValue, IntValue, BasicValueEnum};
+use inkwell::{OptimizationLevel, AddressSpace};
 use std::collections::HashMap;
 
 use super::runtime::RuntimeManager;
@@ -480,5 +480,152 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| YuniError::Codegen(CodegenError::Internal {
                 message: format!("Failed to write object file: {}", e),
             }))
+    }
+    
+    // ========== Vecヘルパー関数 ==========
+    
+    /// 新しいVecを作成
+    pub fn create_vec_new(&mut self, element_type: BasicTypeEnum<'ctx>) -> YuniResult<PointerValue<'ctx>> {
+        let vec_new = self.runtime_manager.get_function("yuni_vec_new")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "yuni_vec_new not found".to_string(),
+            }))?;
+        
+        // 要素のサイズを取得
+        let element_size = element_type.size_of()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "Cannot get size of element type".to_string(),
+            }))?;
+        
+        let size_value = self.builder.build_int_z_extend(element_size, self.context.i64_type(), "element_size")?;
+        
+        let result = self.builder.build_call(vec_new, &[size_value.into()], "vec_new")?;
+        Ok(result.try_as_basic_value().left()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "vec_new returned void".to_string(),
+            }))?
+            .into_pointer_value())
+    }
+    
+    /// Vecに要素を追加
+    pub fn vec_push(&mut self, vec_ptr: PointerValue<'ctx>, value: BasicValueEnum<'ctx>, element_type: BasicTypeEnum<'ctx>) -> YuniResult<()> {
+        let vec_push = self.runtime_manager.get_function("yuni_vec_push")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "yuni_vec_push not found".to_string(),
+            }))?;
+        
+        // 値をメモリに保存
+        let value_ptr = self.builder.build_alloca(element_type, "vec_element")?;
+        self.builder.build_store(value_ptr, value)?;
+        
+        // void*にキャスト
+        let void_ptr = self.builder.build_pointer_cast(
+            value_ptr,
+            self.context.ptr_type(AddressSpace::default()),
+            "element_ptr"
+        )?;
+        
+        self.builder.build_call(vec_push, &[vec_ptr.into(), void_ptr.into()], "vec_push")?;
+        Ok(())
+    }
+    
+    /// Vecから要素を取得
+    pub fn vec_get(&mut self, vec_ptr: PointerValue<'ctx>, index: IntValue<'ctx>, element_type: BasicTypeEnum<'ctx>) -> YuniResult<BasicValueEnum<'ctx>> {
+        let vec_get = self.runtime_manager.get_function("yuni_vec_get")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "yuni_vec_get not found".to_string(),
+            }))?;
+        
+        let index_i64 = self.builder.build_int_z_extend(index, self.context.i64_type(), "index_i64")?;
+        
+        let result_ptr = self.builder.build_call(vec_get, &[vec_ptr.into(), index_i64.into()], "vec_get_result")?;
+        let element_ptr = result_ptr.try_as_basic_value().left()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "vec_get returned void".to_string(),
+            }))?
+            .into_pointer_value();
+        
+        // void*から適切な型にキャスト
+        let typed_ptr = self.builder.build_pointer_cast(
+            element_ptr,
+            self.context.ptr_type(AddressSpace::default()),
+            "typed_element_ptr"
+        )?;
+        
+        Ok(self.builder.build_load(element_type, typed_ptr, "element_value")?)
+    }
+    
+    /// Vecの長さを取得
+    pub fn vec_len(&mut self, vec_ptr: PointerValue<'ctx>) -> YuniResult<IntValue<'ctx>> {
+        let vec_len = self.runtime_manager.get_function("yuni_vec_len")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "yuni_vec_len not found".to_string(),
+            }))?;
+        
+        let result = self.builder.build_call(vec_len, &[vec_ptr.into()], "vec_len")?;
+        Ok(result.try_as_basic_value().left()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "vec_len returned void".to_string(),
+            }))?
+            .into_int_value())
+    }
+    
+    // ========== HashMapヘルパー関数 ==========
+    
+    /// 新しいHashMapを作成
+    pub fn create_hashmap_new(&mut self, key_type: BasicTypeEnum<'ctx>, value_type: BasicTypeEnum<'ctx>) -> YuniResult<PointerValue<'ctx>> {
+        let hashmap_new = self.runtime_manager.get_function("yuni_hashmap_new")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "yuni_hashmap_new not found".to_string(),
+            }))?;
+        
+        // キーと値のサイズを取得
+        let key_size = key_type.size_of()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "Cannot get size of key type".to_string(),
+            }))?;
+        let value_size = value_type.size_of()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "Cannot get size of value type".to_string(),
+            }))?;
+        
+        let key_size_value = self.builder.build_int_z_extend(key_size, self.context.i64_type(), "key_size")?;
+        let value_size_value = self.builder.build_int_z_extend(value_size, self.context.i64_type(), "value_size")?;
+        
+        let result = self.builder.build_call(hashmap_new, &[key_size_value.into(), value_size_value.into()], "hashmap_new")?;
+        Ok(result.try_as_basic_value().left()
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "hashmap_new returned void".to_string(),
+            }))?
+            .into_pointer_value())
+    }
+    
+    /// HashMapに要素を挿入
+    pub fn hashmap_insert(&mut self, map_ptr: PointerValue<'ctx>, key: BasicValueEnum<'ctx>, value: BasicValueEnum<'ctx>, key_type: BasicTypeEnum<'ctx>, value_type: BasicTypeEnum<'ctx>) -> YuniResult<()> {
+        let hashmap_insert = self.runtime_manager.get_function("yuni_hashmap_insert")
+            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                message: "yuni_hashmap_insert not found".to_string(),
+            }))?;
+        
+        // キーと値をメモリに保存
+        let key_ptr = self.builder.build_alloca(key_type, "hashmap_key")?;
+        self.builder.build_store(key_ptr, key)?;
+        let value_ptr = self.builder.build_alloca(value_type, "hashmap_value")?;
+        self.builder.build_store(value_ptr, value)?;
+        
+        // void*にキャスト
+        let key_void_ptr = self.builder.build_pointer_cast(
+            key_ptr,
+            self.context.ptr_type(AddressSpace::default()),
+            "key_ptr"
+        )?;
+        let value_void_ptr = self.builder.build_pointer_cast(
+            value_ptr,
+            self.context.ptr_type(AddressSpace::default()),
+            "value_ptr"
+        )?;
+        
+        self.builder.build_call(hashmap_insert, &[map_ptr.into(), key_void_ptr.into(), value_void_ptr.into()], "hashmap_insert")?;
+        Ok(())
     }
 }

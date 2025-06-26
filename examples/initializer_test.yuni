@@ -4,21 +4,46 @@ fn main() {
     // 構造体の初期化（既存の構文）
     let p1 = Point { x: 10, y: 20 };
     
-    // ジェネリック型の初期化（新しい構文）
-    let v1 = Vec<i32> { 1, 2, 3, 4, 5 };
+    // 匿名構造体リテラルの暗黙的変換
+    let p2: Point = { x: 30, y: 40 };
+    
+    // Vec の初期化（新しい構文）
+    let v1 = Vec<i32>[1, 2, 3, 4, 5];
+    let v2: Vec<i32> = [6, 7, 8, 9, 10];
     
     // HashMap の初期化（キー・バリュー形式）
-    let m1 = HashMap<String, i32> { "a": 1, "b": 2, "c": 3 };
+    let m1 = HashMap<String, i32>{"a": 1, "b": 2, "c": 3};
+    let m2: HashMap<String, i32> = {"x": 100, "y": 200, "z": 300};
     
     // 空の初期化
-    let v2 = Vec<String> { };
+    let v3 = Vec<String>[];
+    let m3 = HashMap<i32, String>{};
     
-    // ネストした初期化
-    let v3 = Vec<Vec<i32>> {
-        Vec<i32> { 1, 2, 3 },
-        Vec<i32> { 4, 5, 6 },
-        Vec<i32> { 7, 8, 9 }
-    };
+    // ネストした初期化（暗黙的変換を活用）
+    let v4: Vec<Vec<i32>> = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+    ];
+    
+    // 関数呼び出し時の暗黙的変換
+    process_point({ x: 50, y: 60 });
+    process_vec([1, 2, 3, 4]);
+    process_map({"key1": "value1", "key2": "value2"});
+    
+    println("初期化子テスト完了");
+}
+
+fn process_point(p: Point) {
+    println("Point processed");
+}
+
+fn process_vec(v: Vec<i32>) {
+    println("Vec processed");
+}
+
+fn process_map(m: HashMap<String, String>) {
+    println("Map processed");
 }
 
 type Point struct {
