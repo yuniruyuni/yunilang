@@ -31,6 +31,9 @@ impl TypeChecker {
         // 組み込み型を登録
         checker.register_builtin_types();
         
+        // 組み込み関数を登録
+        checker.register_builtin_functions();
+        
         checker
     }
 
@@ -103,6 +106,21 @@ impl TypeChecker {
                 },
             ]),
             methods: HashMap::new(),
+            span: Span::dummy(),
+        });
+    }
+    
+    /// 組み込み関数を登録
+    fn register_builtin_functions(&mut self) {
+        // println関数を登録
+        self.functions.insert("println".to_string(), FunctionSignature {
+            name: "println".to_string(),
+            type_params: vec![],
+            params: vec![("message".to_string(), Type::String)],
+            return_type: Type::Void,
+            is_method: false,
+            receiver_type: None,
+            lives_clause: None,
             span: Span::dummy(),
         });
     }

@@ -163,9 +163,8 @@ impl Parser {
         self.expect(Token::RightBracket)?;
         let span = self.span_from(start);
         
-        // 新しいListLiteral式として返す（型名なし）
-        Ok(Expression::ListLiteral(ListLiteral { 
-            type_name: None,
+        // 固定長配列として返す
+        Ok(Expression::Array(ArrayExpr { 
             elements, 
             span 
         }))

@@ -70,19 +70,22 @@ impl<'ctx> CodeGenerator<'ctx> {
         // 構造体名を取得
         let struct_name = match &object_type {
             Type::UserDefined(name) => name.clone(),
+            Type::Generic(name, _) => name.clone(),  // ジェネリック型もサポート
             Type::Reference(inner, _is_mut) => {
-                if let Type::UserDefined(name) = inner.as_ref() {
-                    name.clone()
-                } else {
-                    return Err(YuniError::Codegen(CodegenError::InvalidType {
-                        message: "Field access on non-struct type".to_string(),
-                        span: field.span,
-                    }));
+                match inner.as_ref() {
+                    Type::UserDefined(name) => name.clone(),
+                    Type::Generic(name, _) => name.clone(),
+                    _ => {
+                        return Err(YuniError::Codegen(CodegenError::InvalidType {
+                            message: format!("Field access on non-struct reference type: {:?}", inner),
+                            span: field.span,
+                        }));
+                    }
                 }
             }
             _ => {
                 return Err(YuniError::Codegen(CodegenError::InvalidType {
-                    message: "Field access on non-struct type".to_string(),
+                    message: format!("Field access on non-struct type: {:?}", object_type),
                     span: field.span,
                 }));
             }

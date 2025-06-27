@@ -167,8 +167,14 @@ impl SemanticAnalyzer {
     pub fn analyze_field_expression(&mut self, field: &FieldExpr) -> AnalysisResult<Type> {
         let object_type = self.analyze_expression(&field.object)?;
         
+        // ジェネリック型の場合は具体的な型に展開
+        let concrete_type = match &object_type {
+            Type::Generic(name, type_args) => Type::Generic(name.clone(), type_args.clone()),
+            _ => object_type.clone(),
+        };
+        
         // フィールドの型を取得
-        self.type_checker.get_field_type(&object_type, &field.field, field.span)
+        self.type_checker.get_field_type(&concrete_type, &field.field, field.span)
     }
     
     /// 構造体リテラルの解析
@@ -204,7 +210,35 @@ impl SemanticAnalyzer {
                     self.type_checker.check_type_compatibility(&expected_field.ty, &field_type, struct_lit.span)?;
                 }
                 
-                Ok(Type::UserDefined(struct_name.clone()))
+                // ジェネリック構造体の場合、型パラメータを推論
+                if !struct_info.type_params.is_empty() {
+                    // フィールドの値から型引数を推論
+                    let mut type_args = Vec::new();
+                    let mut type_param_map = std::collections::HashMap::new();
+                    
+                    // 各フィールドから型パラメータを推論
+                    for field_init in &struct_lit.fields {
+                        if let Some(expected_field) = fields.iter().find(|f| f.name == field_init.name) {
+                            let field_type = self.analyze_expression(&field_init.value)?;
+                            self.unify_field_types(&expected_field.ty, &field_type, &mut type_param_map);
+                        }
+                    }
+                    
+                    // 型パラメータの順番で型引数を収集
+                    for type_param in &struct_info.type_params {
+                        if let Some(ty) = type_param_map.get(&type_param.name) {
+                            type_args.push(ty.clone());
+                        }
+                    }
+                    
+                    if type_args.is_empty() {
+                        Ok(Type::UserDefined(struct_name.clone()))
+                    } else {
+                        Ok(Type::Generic(struct_name.clone(), type_args))
+                    }
+                } else {
+                    Ok(Type::UserDefined(struct_name.clone()))
+                }
             }
             _ => Err(AnalysisError::NotAStruct {
                 name: struct_name.clone(),

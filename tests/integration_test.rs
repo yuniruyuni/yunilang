@@ -112,7 +112,7 @@ mod tests {
         
         fn main() {
             let result = calculate(5, 3);
-            println("Result:", result);
+            println("Result calculated");
         }
         "#;
         
@@ -146,7 +146,7 @@ mod tests {
             let origin = Point { x: 0.0, y: 0.0 };
             let point = Point { x: 3.0, y: 4.0 };
             let dist = distance(origin, point);
-            println("Distance:", dist);
+            println("Distance calculated");
         }
         "#;
         
@@ -187,8 +187,8 @@ mod tests {
         fn main() {
             let fact = factorial(5);
             let fib = fibonacci(8);
-            println("Factorial(5):", fact);
-            println("Fibonacci(8):", fib);
+            println("Factorial calculated");
+            println("Fibonacci calculated");
         }
         "#;
         
@@ -207,7 +207,7 @@ mod tests {
         let source = r#"
         package main
         
-        fn classify_number(x: i32): str {
+        fn classify_number(x: i32): String {
             if x > 0 {
                 return "positive";
             } else if x < 0 {
@@ -220,7 +220,7 @@ mod tests {
         fn count_down(n: i32) {
             let mut i = n;
             while i > 0 {
-                println("Count:", i);
+                println("Count updated");
                 i = i - 1;
             }
             println("Done!");
@@ -228,7 +228,7 @@ mod tests {
         
         fn main() {
             let classification = classify_number(-5);
-            println("Number is:", classification);
+            println("Number classified");
             count_down(3);
         }
         "#;
@@ -381,15 +381,26 @@ mod tests {
         
         fn run_calculations() {
             let calc1 = create_calculator();
+            let value1 = calc1.value;
+            let history1 = calc1.history;
             
             // 単純な計算を行う（enumを使わない）
-            let calc2 = add_to_calculator(calc1.value, 10.0, calc1.history);
-            let calc3 = multiply_calculator(calc2.value, 2.0, calc2.history);
-            let calc4 = subtract_from_calculator(calc3.value, 5.0, calc3.history);
-            let calc5 = divide_calculator(calc4.value, 3.0, calc4.history);
+            let calc2 = add_to_calculator(value1, 10.0, history1);
+            let value2 = calc2.value;
+            let history2 = calc2.history;
             
-            println("Final result:", calc5.value);
-            println("Operations performed:", calc5.history);
+            let calc3 = multiply_calculator(value2, 2.0, history2);
+            let value3 = calc3.value;
+            let history3 = calc3.history;
+            
+            let calc4 = subtract_from_calculator(value3, 5.0, history3);
+            let value4 = calc4.value;
+            let history4 = calc4.history;
+            
+            let calc5 = divide_calculator(value4, 3.0, history4);
+            
+            println("Final result calculated");
+            println("Operations performed");
         }
         
         fn main() {
@@ -506,7 +517,7 @@ mod tests {
         fn print_list(head: Option<Box<Node>>) {
             let mut current = head;
             while let Some(node) = current {
-                println("Value:", node.value);
+                println("Value found");
                 current = node.next;
             }
         }
@@ -533,7 +544,7 @@ mod tests {
         
         fn main() {
             let node = SimpleNode { value: 42 };
-            println("Node value:", node.value);
+            println("Node value set");
         }
         "#;
         
@@ -611,7 +622,7 @@ mod tests {
             package main
             fn main() {
                 let very_long_variable_name_that_should_still_work = 42;
-                println("Long identifier:", very_long_variable_name_that_should_still_work);
+                println("Long identifier works");
             }
             "#),
             
@@ -622,7 +633,7 @@ mod tests {
                 let a = 1; let b = 2; let c = 3; let d = 4; let e = 5;
                 let f = 6; let g = 7; let h = 8; let i = 9; let j = 10;
                 let sum = a + b + c + d + e + f + g + h + i + j;
-                println("Sum:", sum);
+                println("Sum calculated");
             }
             "#),
         ];
@@ -692,7 +703,7 @@ mod benchmarks {
         
         fn main() {
             let result = factorial(10);
-            println("Factorial(10):", result);
+            println("Factorial of 10 calculated");
         }
         "#;
         

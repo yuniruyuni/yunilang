@@ -8,6 +8,11 @@ use crate::analyzer::symbol::TypeKind;
 impl TypeChecker {
     /// 型の互換性をチェック
     pub fn check_type_compatibility(&self, expected: &Type, actual: &Type, span: Span) -> AnalysisResult<()> {
+        // 型変数の場合は常に互換性あり（後で具体的な型に置き換えられる）
+        if matches!(expected, Type::Variable(_)) {
+            return Ok(());
+        }
+        
         if self.types_compatible(expected, actual) {
             Ok(())
         } else {

@@ -329,19 +329,22 @@ impl<'ctx> CodeGenerator<'ctx> {
         // 構造体名を取得
         let struct_name = match &object_type {
             Type::UserDefined(name) => name.clone(),
+            Type::Generic(name, _) => name.clone(),  // ジェネリック型もサポート
             Type::Reference(inner, _) => {
-                if let Type::UserDefined(name) = inner.as_ref() {
-                    name.clone()
-                } else {
-                    return Err(YuniError::Codegen(CodegenError::InvalidType {
-                        message: "Field access on non-struct type".to_string(),
-                        span: field.span,
-                    }));
+                match inner.as_ref() {
+                    Type::UserDefined(name) => name.clone(),
+                    Type::Generic(name, _) => name.clone(),
+                    _ => {
+                        return Err(YuniError::Codegen(CodegenError::InvalidType {
+                            message: format!("Field access on non-struct reference type: {:?}", inner),
+                            span: field.span,
+                        }));
+                    }
                 }
             }
             _ => {
                 return Err(YuniError::Codegen(CodegenError::InvalidType {
-                    message: "Field access on non-struct type".to_string(),
+                    message: format!("Field access on non-struct type: {:?}", object_type),
                     span: field.span,
                 }));
             }
@@ -409,10 +412,38 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(field_value)
             }
             _ => {
-                Err(YuniError::Codegen(CodegenError::InvalidType {
-                    message: "Invalid object type for field access".to_string(),
-                    span: field.span,
-                }))
+                // 構造体値をメモリに保存してからアクセス
+                let struct_type = self.type_manager.get_struct(&struct_name)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Struct type not found for {}", struct_name),
+                    }))?;
+                
+                let temp_alloca = self.builder.build_alloca(struct_type, "temp_struct")?;
+                self.builder.build_store(temp_alloca, object_value)?;
+                
+                let indices = [
+                    self.context.i32_type().const_zero(),
+                    self.context.i32_type().const_int(field_index as u64, false),
+                ];
+                
+                let field_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        struct_type,
+                        temp_alloca,
+                        &indices,
+                        &format!("{}_ptr", field.field),
+                    )?
+                };
+                
+                // フィールドの型を取得
+                let field_type = struct_info.get_field_type(field_index as usize)
+                    .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                        message: format!("Field type not found for index {}", field_index),
+                    }))?;
+                
+                let field_llvm_type = self.type_manager.ast_type_to_llvm(field_type)?;
+                let value = self.builder.build_load(field_llvm_type, field_ptr, &field.field)?;
+                Ok(value)
             }
         }
     }

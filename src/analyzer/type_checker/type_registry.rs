@@ -96,6 +96,34 @@ impl TypeChecker {
                     })
                 }
             }
+            Type::Generic(name, type_args) => {
+                // ジェネリック型の場合
+                if let Some(type_info) = self.types.get(name) {
+                    match &type_info.kind {
+                        TypeKind::Struct(fields) => {
+                            if let Some(field) = fields.iter().find(|f| f.name == field_name) {
+                                // フィールドの型をインスタンス化（型パラメータを型引数で置換）
+                                Ok(self.instantiate_type(&field.ty, &type_info.type_params, type_args))
+                            } else {
+                                Err(AnalysisError::UndefinedField {
+                                    struct_name: name.clone(),
+                                    field_name: field_name.to_string(),
+                                    span,
+                                })
+                            }
+                        }
+                        _ => Err(AnalysisError::InvalidType {
+                            message: format!("Type {} is not a struct", name),
+                            span,
+                        }),
+                    }
+                } else {
+                    Err(AnalysisError::UndefinedType {
+                        name: name.clone(),
+                        span,
+                    })
+                }
+            }
             Type::Reference(inner, _) => {
                 // 参照型の場合は内部の型を使用
                 self.get_field_type(inner, field_name, span)
@@ -104,6 +132,40 @@ impl TypeChecker {
                 message: format!("Cannot access field on type {:?}", struct_type),
                 span,
             }),
+        }
+    }
+    
+    /// 型パラメータを型引数で置換
+    fn instantiate_type(&self, ty: &Type, type_params: &[TypeParam], type_args: &[Type]) -> Type {
+        match ty {
+            Type::Variable(name) => {
+                // 型変数を対応する型引数で置換
+                for (i, param) in type_params.iter().enumerate() {
+                    if param.name == *name && i < type_args.len() {
+                        return type_args[i].clone();
+                    }
+                }
+                ty.clone()
+            }
+            Type::Array(elem) => {
+                Type::Array(Box::new(self.instantiate_type(elem, type_params, type_args)))
+            }
+            Type::Reference(inner, is_mut) => {
+                Type::Reference(Box::new(self.instantiate_type(inner, type_params, type_args)), *is_mut)
+            }
+            Type::Generic(name, args) => {
+                let new_args = args.iter()
+                    .map(|arg| self.instantiate_type(arg, type_params, type_args))
+                    .collect();
+                Type::Generic(name.clone(), new_args)
+            }
+            Type::Tuple(types) => {
+                let new_types = types.iter()
+                    .map(|t| self.instantiate_type(t, type_params, type_args))
+                    .collect();
+                Type::Tuple(new_types)
+            }
+            _ => ty.clone(),
         }
     }
 

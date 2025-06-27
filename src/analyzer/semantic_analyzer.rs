@@ -109,4 +109,32 @@ impl SemanticAnalyzer {
             Err(self.errors[0].clone())
         }
     }
+    
+    /// フィールド型から型パラメータを統一
+    fn unify_field_types(&self, expected_type: &Type, actual_type: &Type, type_map: &mut HashMap<String, Type>) {
+        match (expected_type, actual_type) {
+            (Type::Variable(name), _) => {
+                // 型変数の場合、実際の型を記録
+                type_map.insert(name.clone(), actual_type.clone());
+            }
+            (Type::Generic(expected_name, expected_args), Type::Generic(actual_name, actual_args)) 
+                if expected_name == actual_name && expected_args.len() == actual_args.len() => {
+                // ジェネリック型の場合、再帰的に型引数を統一
+                for (expected_arg, actual_arg) in expected_args.iter().zip(actual_args.iter()) {
+                    self.unify_field_types(expected_arg, actual_arg, type_map);
+                }
+            }
+            (Type::Array(expected_elem), Type::Array(actual_elem)) => {
+                // 配列の場合、要素型を統一
+                self.unify_field_types(expected_elem, actual_elem, type_map);
+            }
+            (Type::Reference(expected_inner, _), Type::Reference(actual_inner, _)) => {
+                // 参照の場合、内部型を統一
+                self.unify_field_types(expected_inner, actual_inner, type_map);
+            }
+            _ => {
+                // その他の場合は何もしない
+            }
+        }
+    }
 }

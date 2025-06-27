@@ -19,7 +19,7 @@ package main
 ```yuni
 import (
     "math"
-    "fmt" as format
+    format "fmt"
 )
 ```
 

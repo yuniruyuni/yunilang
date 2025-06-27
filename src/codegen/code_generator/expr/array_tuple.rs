@@ -52,7 +52,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let array_ptr = array_ptr.into_pointer_value();
         let typed_array_ptr = self.builder.build_pointer_cast(
             array_ptr,
-            self.context.ptr_type(AddressSpace::default()),
+            element_type.ptr_type(AddressSpace::default()),
             "typed_array_ptr"
         )?;
 

@@ -1,0 +1,12 @@
+package main
+struct Calculator {
+    value: f64,
+    history: i32,
+}
+fn create_calculator(): Calculator {
+    return Calculator { value: 0.0, history: 0 };
+}
+fn main() {
+    let calc1 = create_calculator();
+    let value1 = calc1.value;
+}

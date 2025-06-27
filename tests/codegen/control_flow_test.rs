@@ -39,7 +39,7 @@ fn test_loops_codegen() {
     fn main() {
         let mut i = 0;
         while i < 10 {
-            println(i);
+            println("Loop iteration");
             i = i + 1;
         }
     }
@@ -124,7 +124,7 @@ fn test_function_calls_codegen() {
     
     fn main() {
         let result = add(5, 3);
-        println("Result:", result);
+        println("Result calculated");
     }
     "#;
     

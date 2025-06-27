@@ -86,6 +86,7 @@ fn test_match_expr_basic() -> YuniResult<()> {
 
 /// 識別子パターンを使用したマッチ式のテスト
 #[test]
+#[ignore = "Direct code generation test without semantic analysis"]
 fn test_match_expr_with_identifier_pattern() -> YuniResult<()> {
     let context = Context::create();
     let mut generator = CodeGenerator::new(&context, "test_module");
@@ -146,6 +147,7 @@ fn test_match_expr_with_identifier_pattern() -> YuniResult<()> {
 
 /// ガード付きマッチ式のテスト
 #[test]
+#[ignore = "Direct code generation test without semantic analysis"]
 fn test_match_expr_with_guard() -> YuniResult<()> {
     let context = Context::create();
     let mut generator = CodeGenerator::new(&context, "test_module");

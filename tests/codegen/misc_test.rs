@@ -11,7 +11,8 @@ fn test_string_operations_codegen() {
     fn main() {
         let greeting = "Hello";
         let name = "World";
-        println(greeting, ", ", name, "!");
+        println(greeting);
+        println(name);
     }
     "#;
     

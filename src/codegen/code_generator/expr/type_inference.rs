@@ -167,13 +167,25 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         
         // 関数の戻り値型を取得
-        if let Some(return_type) = self.function_types.get(func_name) {
-            // Void型の関数は実際にはunit値（i32(0)）を返すため、
-            // 型推論ではI32として扱う
-            if matches!(return_type, Type::Void) {
-                Ok(Type::I32)
-            } else {
-                Ok(return_type.clone())
+        if let Some(func_type) = self.function_types.get(func_name) {
+            match func_type {
+                Type::Function(fn_type) => {
+                    // 関数型から戻り値の型を取得
+                    let return_type = &fn_type.return_type;
+                    if matches!(return_type.as_ref(), Type::Void) {
+                        Ok(Type::I32) // Void型の関数は実際にはunit値（i32(0)）を返す
+                    } else {
+                        Ok(return_type.as_ref().clone())
+                    }
+                }
+                _ => {
+                    // 通常の型の場合（後方互換性のため）
+                    if matches!(func_type, Type::Void) {
+                        Ok(Type::I32)
+                    } else {
+                        Ok(func_type.clone())
+                    }
+                }
             }
         } else {
             // 関数が見つからない場合はエラー
@@ -252,19 +264,22 @@ impl<'ctx> CodeGenerator<'ctx> {
         
         let struct_name = match &object_type {
             Type::UserDefined(name) => name.clone(),
+            Type::Generic(name, _) => name.clone(),  // ジェネリック型もサポート
             Type::Reference(inner, _) => {
-                if let Type::UserDefined(name) = inner.as_ref() {
-                    name.clone()
-                } else {
-                    return Err(YuniError::Codegen(CodegenError::InvalidType {
-                        message: "Field access on non-struct type".to_string(),
-                        span: field.span,
-                    }));
+                match inner.as_ref() {
+                    Type::UserDefined(name) => name.clone(),
+                    Type::Generic(name, _) => name.clone(),
+                    _ => {
+                        return Err(YuniError::Codegen(CodegenError::InvalidType {
+                            message: format!("Field access on non-struct reference type: {:?}", inner),
+                            span: field.span,
+                        }));
+                    }
                 }
             }
             _ => {
                 return Err(YuniError::Codegen(CodegenError::InvalidType {
-                    message: "Field access on non-struct type".to_string(),
+                    message: format!("Field access on non-struct type: {:?}", object_type),
                     span: field.span,
                 }));
             }

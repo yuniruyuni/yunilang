@@ -252,18 +252,15 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// 関数型を作成
     fn create_function_type(&self, func_decl: &FunctionDecl) -> YuniResult<inkwell::types::FunctionType<'ctx>> {
-        let param_types: Vec<_> = func_decl.params.iter()
-            .map(|param| self.type_manager.ast_type_to_llvm(&param.ty))
-            .collect::<YuniResult<Vec<_>>>()?;
+        let param_types: Vec<Type> = func_decl.params.iter()
+            .map(|param| param.ty.clone())
+            .collect();
         
         let return_type = func_decl.return_type.as_ref()
             .map(|ty| ty.as_ref())
             .unwrap_or(&Type::Void);
         
-        self.type_manager.create_function_type(&param_types.iter().map(|t| {
-            // BasicTypeEnumからTypeに変換（簡易版）
-            Type::UserDefined("_".to_string())
-        }).collect::<Vec<_>>(), return_type, false)
+        self.type_manager.create_function_type(&param_types, return_type, false)
     }
 
     /// メソッド型を作成

@@ -93,6 +93,9 @@ fn test_array_expressions() {
     let ir = compile_to_ir(source, "test_arrays").unwrap();
     assert_valid_ir(&ir);
     
+    // デバッグ出力
+    println!("Generated IR:\n{}", ir);
+    
     // 配列の初期化と要素アクセスが含まれていることを確認
     assert!(ir.contains("alloca") || ir.contains("malloc"), "IR should contain memory allocation for arrays");
     assert!(ir.contains("store"), "IR should contain store instructions for array initialization");
@@ -119,6 +122,12 @@ fn test_index_access() {
             let arr = [5, 10, 15, 20];
             let i = 3;
             return arr[i];  // Should return 20
+        }
+        
+        fn main() {
+            let r1 = test_array_index();
+            let r2 = test_array_index_ref();
+            let r3 = test_array_index_expr();
         }
     "#;
 
