@@ -69,6 +69,29 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(value)
             }
             _ => {
+                // bool型をチェック
+                if value.is_int_value() {
+                    let int_val = value.into_int_value();
+                    if int_val.get_type().get_bit_width() == 1 {
+                        // bool型の場合
+                        let to_string_fn = self.runtime_manager.get_function("yuni_bool_to_string")
+                            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                                message: "Runtime function yuni_bool_to_string not found".to_string(),
+                            }))?;
+                        
+                        let result = self.builder.build_call(
+                            to_string_fn,
+                            &[int_val.into()],
+                            "bool_to_string_result",
+                        )?.try_as_basic_value().left()
+                            .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
+                                message: "yuni_bool_to_string should return a value".to_string(),
+                            }))?;
+                        
+                        return Ok(result);
+                    }
+                }
+                
                 // その他の型は未実装
                 Err(YuniError::Codegen(CodegenError::Unimplemented {
                     feature: format!("String conversion for type {:?} not implemented", value.get_type()),

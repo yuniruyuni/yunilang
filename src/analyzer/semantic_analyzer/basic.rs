@@ -17,6 +17,15 @@ impl SemanticAnalyzer {
             }),
         };
         
+        // println は特殊な可変長引数関数として扱う
+        if func_name == "println" {
+            // 各引数の型をチェック（すべての型を受け入れる）
+            for arg in &call.args {
+                self.analyze_expression(arg)?;
+            }
+            return Ok(Type::Void);
+        }
+        
         // 関数が定義されているか確認
         let func_sig = self.type_checker.get_function_signature(func_name)
             .ok_or_else(|| AnalysisError::UndefinedFunction {

@@ -23,7 +23,7 @@ fn main() {
     let p: Point = Point { x: 10i32, y: 20i32 };
     let x: i32 = p.x;
     let y: i32 = p.y;
-    println("Point created");
+    println("Point x:", x, "y:", y);
 }
 "#;
 
@@ -80,7 +80,7 @@ fn main() {
     let x2: i32 = rect.bottom_right.x;
     let y2: i32 = rect.bottom_right.y;
     
-    println("Rectangle created");
+    println("Rectangle: (", x1, ",", y1, ") - (", x2, ",", y2, ")");
 }
 "#;
 
@@ -122,7 +122,7 @@ fn main() {
     let mut p: Point = Point { x: 10i32, y: 20i32 };
     p.x = 30i32;
     p.y = 40i32;
-    println("Point accessed");
+    println("Point after update: x =", p.x, ", y =", p.y);
 }
 "#;
 
@@ -174,7 +174,7 @@ fn main() {
     let height: f64 = person.height;
     let is_student: bool = person.is_student;
     
-    println("Person info accessed");
+    println("Person:", name, age, height, is_student);
 }
 "#;
 
@@ -253,7 +253,7 @@ fn main() {
     let p: Point = Point { x: 10i32, y: 20i32 };
     let p_ref: &Point = &p;
     let x: i32 = p_ref.x;
-    println("Value accessed");
+    println("x from reference:", x);
 }
 "#;
 

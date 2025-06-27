@@ -112,7 +112,7 @@ mod tests {
         
         fn main() {
             let result = calculate(5, 3);
-            println("Result calculated");
+            println("Result: ", result);
         }
         "#;
         
@@ -146,7 +146,7 @@ mod tests {
             let origin = Point { x: 0.0, y: 0.0 };
             let point = Point { x: 3.0, y: 4.0 };
             let dist = distance(origin, point);
-            println("Distance calculated");
+            println("Distance: ", dist);
         }
         "#;
         
@@ -187,8 +187,8 @@ mod tests {
         fn main() {
             let fact = factorial(5);
             let fib = fibonacci(8);
-            println("Factorial calculated");
-            println("Fibonacci calculated");
+            println("Factorial of 5: ", fact);
+            println("Fibonacci of 8: ", fib);
         }
         "#;
         
@@ -220,7 +220,7 @@ mod tests {
         fn count_down(n: i32) {
             let mut i = n;
             while i > 0 {
-                println("Count updated");
+                println("Count: ", i);
                 i = i - 1;
             }
             println("Done!");
@@ -228,7 +228,7 @@ mod tests {
         
         fn main() {
             let classification = classify_number(-5);
-            println("Number classified");
+            println("Classification for -5: ", classification);
             count_down(3);
         }
         "#;
@@ -398,9 +398,11 @@ mod tests {
             let history4 = calc4.history;
             
             let calc5 = divide_calculator(value4, 3.0, history4);
+            let value5 = calc5.value;
+            let history5 = calc5.history;
             
-            println("Final result calculated");
-            println("Operations performed");
+            println("Final result: ", value5);
+            println("Operations performed: ", history5);
         }
         
         fn main() {
@@ -517,7 +519,7 @@ mod tests {
         fn print_list(head: Option<Box<Node>>) {
             let mut current = head;
             while let Some(node) = current {
-                println("Value found");
+                println("Value: ", node.value);
                 current = node.next;
             }
         }
@@ -544,7 +546,7 @@ mod tests {
         
         fn main() {
             let node = SimpleNode { value: 42 };
-            println("Node value set");
+            println("Node value: ", node.value);
         }
         "#;
         
@@ -584,7 +586,7 @@ mod tests {
         for i in 0..function_count {
             source.push_str(&format!("    let result_{} = function_{}({});\n", i, i, i));
         }
-        source.push_str("    println(\"All functions executed\");\n");
+        source.push_str(&format!("    println(\"All {0} functions executed\");\n", function_count));
         source.push_str("}\n");
         
         source
@@ -633,7 +635,7 @@ mod tests {
                 let a = 1; let b = 2; let c = 3; let d = 4; let e = 5;
                 let f = 6; let g = 7; let h = 8; let i = 9; let j = 10;
                 let sum = a + b + c + d + e + f + g + h + i + j;
-                println("Sum calculated");
+                println("Sum: ", sum);
             }
             "#),
         ];
@@ -703,7 +705,7 @@ mod benchmarks {
         
         fn main() {
             let result = factorial(10);
-            println("Factorial of 10 calculated");
+            println("Factorial of 10: ", result);
         }
         "#;
         

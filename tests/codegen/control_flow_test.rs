@@ -124,7 +124,7 @@ fn test_function_calls_codegen() {
     
     fn main() {
         let result = add(5, 3);
-        println("Result calculated");
+        println("Result:", result);
     }
     "#;
     

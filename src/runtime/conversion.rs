@@ -111,3 +111,14 @@ pub extern "C" fn yuni_u128_to_string(n: u128) -> *mut c_char {
 pub extern "C" fn yuni_f32_to_string(n: f32) -> *mut c_char {
     yuni_f64_to_string(n as f64)
 }
+
+/// Convert bool to string
+#[no_mangle]
+pub extern "C" fn yuni_bool_to_string(b: bool) -> *mut c_char {
+    let s = if b { "true" } else { "false" };
+    if let Ok(c_string) = CString::new(s) {
+        c_string.into_raw()
+    } else {
+        std::ptr::null_mut()
+    }
+}

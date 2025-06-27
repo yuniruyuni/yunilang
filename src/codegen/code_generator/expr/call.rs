@@ -126,15 +126,30 @@ impl<'ctx> CodeGenerator<'ctx> {
 
             // すべての引数を文字列に変換して連結
             let mut result_str = format_arg;
+            
+            // スペース文字列を作成
+            let space_str = self.context.const_string(b" ", true);
+            let space_global = self.module.add_global(space_str.get_type(), None, "space_str");
+            space_global.set_initializer(&space_str);
+            space_global.set_constant(true);
+            let space_ptr = space_global.as_pointer_value();
+            
             for arg in args.iter().skip(1) {
-                let arg_value = self.compile_expression(arg)?;
-                let arg_str = self.value_to_string(arg_value)?;
-                
-                // 文字列連結
+                // スペースを追加
                 let concat_fn = self.runtime_manager.get_function("yuni_string_concat")
                     .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                         message: "yuni_string_concat function not found".to_string(),
                     }))?;
+                
+                result_str = self.builder.build_call(
+                    concat_fn, 
+                    &[result_str.into(), space_ptr.into()], 
+                    "concat_space"
+                )?.try_as_basic_value().left().unwrap();
+                
+                // 引数を追加
+                let arg_value = self.compile_expression(arg)?;
+                let arg_str = self.value_to_string(arg_value)?;
                 
                 result_str = self.builder.build_call(
                     concat_fn, 

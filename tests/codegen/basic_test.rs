@@ -51,7 +51,7 @@ fn test_ir_validation() {
     
     fn main() {
         let x = add(5, 3);
-        println("Result calculated");
+        println("Result:", x);
     }
     "#;
     
@@ -71,5 +71,5 @@ fn test_ir_validation() {
     
     // 文字列定数の確認
     assert!(ir.contains("@") || ir.contains("global"), "Should contain global definitions");
-    assert!(ir.contains("Result calculated"), "Should contain the format string");
+    assert!(ir.contains("Result:"), "Should contain the format string");
 }
