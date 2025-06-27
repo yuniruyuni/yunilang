@@ -104,7 +104,7 @@ fn test_argument_count_mismatch_error() {
     "#;
     
     assert_specific_error(source, |e| {
-        matches!(e, AnalyzerError::ArgumentCountMismatch { .. })
+        matches!(e, AnalyzerError::ArgCountMismatch { .. })
     });
 }
 

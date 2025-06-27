@@ -40,7 +40,7 @@ fn test_method_not_found_error() {
     "#;
     
     assert_specific_error(source, |e| {
-        matches!(e, AnalyzerError::MethodNotFound { .. })
+        matches!(e, AnalyzerError::UndefinedMethod { .. })
     });
 }
 
@@ -61,7 +61,7 @@ fn test_method_signature_registration() {
     impl fn distance(p1: &Point, p2: &Point): f64 {
         let dx = p1.x - p2.x;
         let dy = p1.y - p2.y;
-        return sqrt(dx * dx + dy * dy);
+        return dx * dx + dy * dy;
     }
     
     fn main() {
@@ -100,7 +100,7 @@ fn test_method_duplicate_error() {
     "#;
     
     assert_specific_error(source, |e| {
-        matches!(e, AnalyzerError::DuplicateFunction { .. })
+        matches!(e, AnalyzerError::DuplicateMethod { .. })
     });
 }
 

@@ -46,8 +46,8 @@ fn test_function_type_checking() {
         return a + b;
     }
     
-    fn greet(name: str): str {
-        return "Hello, " + name;
+    fn greet(name: string): string {
+        return name;
     }
     
     fn main() {

@@ -100,6 +100,9 @@ pub enum AnalyzerError {
 
     #[error("変数 {name} は既にこのスコープで定義されています")]
     DuplicateVariable { name: String, span: Span },
+    
+    #[error("メソッド {method_name} は型 {type_name} に既に定義されています")]
+    DuplicateMethod { type_name: String, method_name: String, span: Span },
 
     #[error("{name} の型を推論できません")]
     TypeInferenceError { name: String, span: Span },
@@ -143,6 +146,27 @@ pub enum AnalyzerError {
     
     #[error("到達不能コード")]
     UnreachableCode { span: Span },
+    
+    #[error("引数の数が一致しません: {expected}個を期待しましたが、{found}個が見つかりました")]
+    ArgCountMismatch { expected: usize, found: usize, span: Span },
+    
+    #[error("メソッド {method_name} が型 {type_name} に見つかりません")]
+    UndefinedMethod { type_name: String, method_name: String, span: Span },
+    
+    #[error("フィールド {field_name} が構造体 {struct_name} に見つかりません")]
+    UndefinedField { struct_name: String, field_name: String, span: Span },
+    
+    #[error("{name} は構造体ではありません")]
+    NotAStruct { name: String, span: Span },
+    
+    #[error("不正な型: {message}")]
+    InvalidType { message: String, span: Span },
+    
+    #[error("型推論エラー: {message}")]
+    TypeInference { message: String, span: Span },
+    
+    #[error("内部エラー: {message}")]
+    Internal { message: String },
 }
 
 /// コード生成エラーの詳細
@@ -169,6 +193,12 @@ pub enum CodegenError {
     
     #[error("コンパイル失敗: {message}")]
     CompilationFailed { message: String, span: Span },
+    
+    #[error("main関数が見つかりません")]
+    MissingMain,
+    
+    #[error("モジュール検証エラー: {message}")]
+    ModuleVerification { message: String },
 }
 
 /// エラー情報とソースコードの位置情報を含むエラー
@@ -254,6 +284,14 @@ impl DiagnosticError {
                     format!("コンパイル失敗: {}", message),
                     vec![Label::primary(self.file_id, span.start..span.end)],
                 ),
+                CodegenError::MissingMain => (
+                    "main関数が見つかりません".to_string(),
+                    vec![],
+                ),
+                CodegenError::ModuleVerification { message } => (
+                    format!("モジュール検証エラー: {}", message),
+                    vec![],
+                ),
             },
             YuniError::Io(message) => (
                 format!("ファイル操作エラー: {}", message),
@@ -303,6 +341,11 @@ impl DiagnosticError {
             ),
             AnalyzerError::DuplicateVariable { name, span } => (
                 format!("変数 {} は既にこのスコープで定義されています", name),
+                vec![Label::primary(self.file_id, span.start..span.end)
+                    .with_message("重複した定義")],
+            ),
+            AnalyzerError::DuplicateMethod { type_name, method_name, span } => (
+                format!("メソッド {} は型 {} に既に定義されています", method_name, type_name),
                 vec![Label::primary(self.file_id, span.start..span.end)
                     .with_message("重複した定義")],
             ),
@@ -372,6 +415,36 @@ impl DiagnosticError {
                 "到達不能コード".to_string(),
                 vec![Label::primary(self.file_id, span.start..span.end)
                     .with_message("このコードは実行されません")],
+            ),
+            AnalyzerError::ArgCountMismatch { expected, found, span } => (
+                format!("引数の数が一致しません: {}個を期待しましたが、{}個が見つかりました", expected, found),
+                vec![Label::primary(self.file_id, span.start..span.end)],
+            ),
+            AnalyzerError::UndefinedMethod { type_name, method_name, span } => (
+                format!("メソッド {} が型 {} に見つかりません", method_name, type_name),
+                vec![Label::primary(self.file_id, span.start..span.end)
+                    .with_message("このメソッドは定義されていません")],
+            ),
+            AnalyzerError::UndefinedField { struct_name, field_name, span } => (
+                format!("フィールド {} が構造体 {} に見つかりません", field_name, struct_name),
+                vec![Label::primary(self.file_id, span.start..span.end)
+                    .with_message("このフィールドは定義されていません")],
+            ),
+            AnalyzerError::NotAStruct { name, span } => (
+                format!("{} は構造体ではありません", name),
+                vec![Label::primary(self.file_id, span.start..span.end)],
+            ),
+            AnalyzerError::InvalidType { message, span } => (
+                format!("不正な型: {}", message),
+                vec![Label::primary(self.file_id, span.start..span.end)],
+            ),
+            AnalyzerError::TypeInference { message, span } => (
+                format!("型推論エラー: {}", message),
+                vec![Label::primary(self.file_id, span.start..span.end)],
+            ),
+            AnalyzerError::Internal { message } => (
+                format!("内部エラー: {}", message),
+                vec![],
             ),
         }
     }

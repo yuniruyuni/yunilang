@@ -15,6 +15,10 @@ mod expressions;
 mod scope;
 mod statements;
 mod validation;
+mod literals;
+mod operations;
+mod collections_analyzer;
+mod basic;
 
 /// セマンティック解析器
 pub struct SemanticAnalyzer {

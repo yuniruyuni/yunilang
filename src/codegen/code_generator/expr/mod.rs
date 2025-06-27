@@ -6,15 +6,23 @@ mod unary;
 mod call;
 mod struct_enum;
 mod array_tuple;
-mod control;
 mod type_inference;
 mod basic;
+mod reference;
+mod collections;
+mod type_coercion;
+mod type_utilities;
+mod match_expr;
+mod pattern_match;
+mod primitive_match;
+mod if_expr;
+mod block_expr;
 
 use crate::ast::*;
 use crate::error::YuniResult;
 use inkwell::values::BasicValueEnum;
 
-use super::code_generator::CodeGenerator;
+use crate::codegen::code_generator::CodeGenerator;
 
 impl<'ctx> CodeGenerator<'ctx> {
     /// 式をコンパイル（期待される型のコンテキストなし）

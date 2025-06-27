@@ -86,6 +86,10 @@ impl Parser {
                 self.advance();
                 Ok(Type::String)
             }
+            Some(Token::Identifier(name)) if name == "string" => {
+                self.advance();
+                Ok(Type::String)
+            }
             Some(Token::Identifier(name)) if name == "void" => {
                 self.advance();
                 Ok(Type::Void)
