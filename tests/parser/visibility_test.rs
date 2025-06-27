@@ -44,29 +44,35 @@ type Point struct {
     y: i32
 }
 
-pub impl fn add(p1: &Point, p2: &Point): Point {
+pub fn (p1: &Point) add(p2: &Point): Point {
     return Point { x: p1.x + p2.x, y: p1.y + p2.y };
 }
 
-impl fn private_method(p: &Point) {
+fn (p: &Point) private_method() {
 }
 "#;
     
     let ast = assert_parse_success(source);
     assert_eq!(ast.items.len(), 3);
     
-    if let Item::Method(ref method) = ast.items[1] {
-        assert_eq!(method.name, "add");
-        assert!(method.is_public);
+    if let Item::Function(ref func) = ast.items[1] {
+        assert_eq!(func.name, "add");
+        assert!(func.is_public);
+        // メソッドであることを確認（最初のパラメータがレシーバー）
+        assert!(func.params.len() >= 1);
+        assert!(func.params[0].name == "p1");
     } else {
-        panic!("Expected method");
+        panic!("Expected function (method)");
     }
     
-    if let Item::Method(ref method) = ast.items[2] {
-        assert_eq!(method.name, "private_method");
-        assert!(!method.is_public);
+    if let Item::Function(ref func) = ast.items[2] {
+        assert_eq!(func.name, "private_method");
+        assert!(!func.is_public);
+        // メソッドであることを確認（最初のパラメータがレシーバー）
+        assert!(func.params.len() >= 1);
+        assert!(func.params[0].name == "p");
     } else {
-        panic!("Expected method");
+        panic!("Expected function (method)");
     }
 }
 

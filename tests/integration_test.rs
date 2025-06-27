@@ -139,7 +139,8 @@ mod tests {
         fn distance(p1: Point, p2: Point): f64 {
             let dx = p1.x - p2.x;
             let dy = p1.y - p2.y;
-            return dx * dx + dy * dy;  // 簡略化: sqrtを使わない
+            // 距離の二乗を返す（sqrtは標準ライブラリ実装後に使用可能）
+            return dx * dx + dy * dy;
         }
         
         fn main() {

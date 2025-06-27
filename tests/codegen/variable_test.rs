@@ -49,8 +49,9 @@ fn test_memory_management_codegen() {
     
     fn main() {
         let large = create_large_struct();
-        // フィールドアクセスのテストは構造体の値渡しで問題があるため、簡略化
-        let x = 10i64;
+        let data1 = large.data1;
+        let data2 = large.data2;
+        let sum = data1 + data2;
     }
     "#;
     
@@ -85,10 +86,11 @@ fn test_assignment_expressions() {
         b = 100;
         c = 100;
         
-        // 構造体フィールドへの代入（構造体が定義されている場合）
-        // struct Point { x: i32, y: i32 }
-        // let mut point = Point { x: 0, y: 0 };
-        // point.x = 10;
+        // 構造体フィールドへの代入
+        struct Point { x: i32, y: i32 }
+        let mut point = Point { x: 0, y: 0 };
+        point.x = 10;
+        point.y = 20;
     }
     "#;
     

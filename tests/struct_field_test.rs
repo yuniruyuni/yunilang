@@ -108,8 +108,8 @@ fn main() {
 
 /// 構造体フィールドへの代入のテスト
 #[test]
-#[ignore] // フィールドへの直接代入は現在未実装
 fn test_struct_field_assignment() {
+    // フィールドへの直接代入のテスト
     let input = r#"
 package test
 
@@ -239,8 +239,8 @@ fn main() {
 
 /// 参照経由のフィールドアクセステスト
 #[test]
-#[ignore] // 参照型のフィールドアクセスは現在未実装
 fn test_reference_field_access() {
+    // 参照経由のフィールドアクセステスト
     let input = r#"
 package test
 

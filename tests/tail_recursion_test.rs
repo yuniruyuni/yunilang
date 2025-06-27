@@ -33,12 +33,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires main function - tail recursion optimization is tested in integration tests"]
     fn test_tail_recursive_factorial() {
         let source = r#"
             package test
             
-            fn factorial_acc(n: i32, acc: i32) : i32 {
+            fn factorial_acc(n: i32, acc: i32): i32 {
                 if n <= 1 {
                     return acc;
                 } else {
@@ -46,8 +45,13 @@ mod tests {
                 }
             }
             
-            fn factorial(n: i32) : i32 {
+            fn factorial(n: i32): i32 {
                 return factorial_acc(n, 1);
+            }
+            
+            fn main() {
+                let result = factorial(5);
+                println("Factorial of 5:", result);
             }
         "#;
 
@@ -61,20 +65,24 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires main function - tail recursion optimization is tested in integration tests"]
     fn test_tail_recursive_sum() {
         let source = r#"
             package test
             
-            fn sum_acc(n: i32, acc: i32) : i32 {
+            fn sum_acc(n: i32, acc: i32): i32 {
                 if n <= 0 {
                     return acc;
                 }
                 return sum_acc(n - 1, acc + n);
             }
             
-            fn sum(n: i32) : i32 {
+            fn sum(n: i32): i32 {
                 return sum_acc(n, 0);
+            }
+            
+            fn main() {
+                let result = sum(10);
+                println("Sum of 1 to 10:", result);
             }
         "#;
 
@@ -88,17 +96,21 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires main function - tail recursion optimization is tested in integration tests"]
     fn test_non_tail_recursive() {
         let source = r#"
             package test
             
-            fn factorial(n: i32) : i32 {
+            fn factorial(n: i32): i32 {
                 if n <= 1 {
                     return 1;
                 } else {
                     return n * factorial(n - 1);
                 }
+            }
+            
+            fn main() {
+                let result = factorial(5);
+                println("Non-tail recursive factorial of 5:", result);
             }
         "#;
 
@@ -114,23 +126,27 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires main function - tail recursion optimization is tested in integration tests"]
     fn test_mutual_tail_recursion() {
         let source = r#"
             package test
             
-            fn is_even(n: i32) : bool {
+            fn is_even(n: i32): bool {
                 if n == 0 {
                     return true;
                 }
                 return is_odd(n - 1);
             }
             
-            fn is_odd(n: i32) : bool {
+            fn is_odd(n: i32): bool {
                 if n == 0 {
                     return false;
                 }
                 return is_even(n - 1);
+            }
+            
+            fn main() {
+                let result = is_even(10);
+                println("Is 10 even?", result);
             }
         "#;
 
@@ -145,16 +161,20 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Parser does not yet support match expressions syntax"]
     fn test_tail_call_in_match() {
         let source = r#"
             package test
             
-            fn count_down(n: i32) : i32 {
-                match n {
+            fn count_down(n: i32): i32 {
+                return match n {
                     0 => 0,
                     _ => count_down(n - 1)
-                }
+                };
+            }
+            
+            fn main() {
+                let result = count_down(10);
+                println("Count down result:", result);
             }
         "#;
 

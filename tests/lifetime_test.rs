@@ -6,11 +6,14 @@ use yunilang::parser::Parser;
 
 #[test]
 fn test_lifetime_parameters_processing() {
-    // 簡単な関数で実装のテスト
+    // ライフタイムパラメータの処理テスト
     let source = r#"
         package test
 
-        fn longest(x: &str, y: &str): &str {
+        fn longest(x: &String, y: &String): (ret: &String)
+        lives
+            ret = x | y
+        {
             return x;
         }
     "#;
@@ -20,29 +23,23 @@ fn test_lifetime_parameters_processing() {
     let mut parser = Parser::new(tokens);
     let program = parser.parse().expect("パースに失敗");
     
-    // ライフタイム句を手動で追加してテスト
-    if let yunilang::ast::Item::Function(ref mut func) = program.items[0].clone() {
-        func.lives_clause = Some(yunilang::ast::LivesClause {
-            constraints: vec![
-                yunilang::ast::LivesConstraint {
-                    target: "'a".to_string(),
-                    sources: vec!["'b".to_string()],
-                    span: yunilang::ast::Span::dummy(),
-                }
-            ],
-            span: yunilang::ast::Span::dummy(),
-        });
+    // lives節が正しくパースされることを確認
+    let mut analyzer = SemanticAnalyzer::new();
+    let result = analyzer.analyze(&program);
+    assert!(result.is_ok(), "ライフタイム解析でエラーが発生: {:?}", result);
+    
+    // 関数にlives節があることを確認
+    if let yunilang::ast::Item::Function(ref func) = program.items[0] {
+        assert!(func.lives_clause.is_some(), "lives節がパースされていません");
         
-        let mut analyzer = SemanticAnalyzer::new();
-        // 手動で関数を解析
-        let result = analyzer.analyze_function(func);
+        let lives = func.lives_clause.as_ref().unwrap();
+        assert_eq!(lives.constraints.len(), 1, "制約が1つあるべき");
         
-        // ライフタイムパラメータがエラーなく処理されることを確認
-        assert!(result.is_ok(), "ライフタイム解析でエラーが発生: {:?}", result);
-        
-        // ライフタイムコンテキストに登録されていることを確認
-        assert!(analyzer.lifetime_context.lifetimes.len() > 1); // 最低でも'staticと'a、'bがある
-        assert!(!analyzer.lifetime_context.constraints.is_empty()); // 制約が登録されている
+        let constraint = &lives.constraints[0];
+        assert_eq!(constraint.target, "ret");
+        assert_eq!(constraint.sources.len(), 2);
+        assert!(constraint.sources.contains(&"x".to_string()));
+        assert!(constraint.sources.contains(&"y".to_string()));
     } else {
         panic!("関数が見つかりませんでした");
     }
@@ -54,7 +51,12 @@ fn test_multiple_lifetime_constraints() {
     let source = r#"
         package test
 
-        fn complex_lifetime(x: &str, y: &str, z: &str, w: &str): &str {
+        fn complex_lifetime(x: &String, y: &String, z: &String, w: &String): (result: &String)
+        lives
+            result = w,
+            w = x | y,
+            x = z
+        {
             return w;
         }
     "#;
@@ -64,7 +66,8 @@ fn test_multiple_lifetime_constraints() {
     let mut parser = Parser::new(tokens);
     let program = parser.parse().expect("パースに失敗");
     
-    // ライフタイム句を手動で追加してテスト
+    // lives節のパーサー実装までの代替テスト
+    // 正しい構文ではlives節でライフタイム制約を明示
     if let yunilang::ast::Item::Function(ref mut func) = program.items[0].clone() {
         func.lives_clause = Some(yunilang::ast::LivesClause {
             constraints: vec![

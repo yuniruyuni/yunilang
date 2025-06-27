@@ -3,7 +3,6 @@
 use super::*;
 
 #[test]
-#[ignore] // TODO: Multi-segment path (Operation::Add) support needed
 fn test_complex_program_codegen() {
     // 複雑なプログラム全体のコード生成テスト
     let source = r#"
@@ -107,18 +106,17 @@ fn test_executable_generation() {
 }
 
 #[test]
-#[ignore = "Parser does not yet support match expressions syntax"]
 fn test_match_string_patterns() {
     // match式の文字列パターンのコード生成をテスト
     let source = r#"
         package test
         
-        fn greet(name: string) -> string {
-            match name {
+        fn greet(name: string): string {
+            return match name {
                 "Alice" => "Hello, Alice!",
                 "Bob" => "Hi, Bob!",
                 _ => "Nice to meet you!"
-            }
+            };
         }
     "#;
 
@@ -137,10 +135,35 @@ fn test_match_string_patterns() {
 
 #[test]
 fn test_method_calls() {
-    // メソッド呼び出しの実装は、パーサーがメソッド呼び出し構文をサポートしていないため
-    // 現在はスキップする。
-    // TODO: パーサーがメソッド呼び出し構文（object.method()）をサポートしたら、
-    // このテストを有効化する
+    // メソッド呼び出しのコード生成テスト
+    let source = r#"
+        package test
+        
+        struct Point {
+            x: f64,
+            y: f64,
+        }
+        
+        fn (p: &Point) distance_to(other: &Point): f64 {
+            let dx = p.x - other.x;
+            let dy = p.y - other.y;
+            return dx * dx + dy * dy;
+        }
+        
+        fn main() {
+            let p1 = Point { x: 0.0, y: 0.0 };
+            let p2 = Point { x: 3.0, y: 4.0 };
+            let dist = p1.distance_to(&p2);
+            println("Distance squared:", dist);
+        }
+    "#;
     
-    // 実装自体は完了しているので、タスクは完了とする
+    let result = compile_to_ir(source, "test_method_calls");
+    assert!(result.is_ok(), "Compilation should succeed: {:?}", result.unwrap_err());
+    
+    let ir = result.unwrap();
+    
+    // メソッド呼び出しが正しくコンパイルされることを確認
+    assert!(ir.contains("distance_to"), "Should contain method function");
+    assert!(ir.contains("call"), "Should contain method call");
 }

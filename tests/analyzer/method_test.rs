@@ -47,8 +47,6 @@ fn test_method_not_found_error() {
 #[test]
 fn test_method_signature_registration() {
     // メソッドシグネチャ登録のテスト
-    // 注：現在のパーサーの制限により、メソッドは"impl fn"構文を使用し、
-    // レシーバーは最初のパラメータとして明示的に指定される
     let source = r#"
     package main
     
@@ -58,7 +56,7 @@ fn test_method_signature_registration() {
     }
     
     // メソッドとして登録される
-    impl fn distance(p1: &Point, p2: &Point): f64 {
+    fn (p1: &Point) distance(p2: &Point): f64 {
         let dx = p1.x - p2.x;
         let dy = p1.y - p2.y;
         return dx * dx + dy * dy;
@@ -66,17 +64,16 @@ fn test_method_signature_registration() {
     
     fn main() {
         // メソッドが登録されることを確認するテスト
-        // 実際の呼び出しはメソッドコール構文が必要だが、
-        // 現在のパーサーはそれをサポートしていない
         let p1 = Point { x: 0.0, y: 0.0 };
         let p2 = Point { x: 3.0, y: 4.0 };
+        let dist = p1.distance(p2);
     }
     "#;
     
     assert_analysis_success(source);
 }
 
-#[test] 
+#[test]
 fn test_method_duplicate_error() {
     // メソッド重複エラーのテスト
     let source = r#"
@@ -87,11 +84,11 @@ fn test_method_duplicate_error() {
         height: f64,
     }
     
-    impl fn area(rect: &Rectangle): f64 {
+    fn (rect: &Rectangle) area(): f64 {
         return rect.width * rect.height;
     }
     
-    impl fn area(rect: &Rectangle): f64 {  // 重複メソッド
+    fn (rect: &Rectangle) area(): f64 {  // 重複メソッド
         return rect.width * rect.height;
     }
     
@@ -110,7 +107,7 @@ fn test_method_on_undefined_type_error() {
     let source = r#"
     package main
     
-    impl fn method(obj: &UndefinedType) {
+    fn (obj: &UndefinedType) method() {
         println("This should fail");
     }
     
@@ -133,11 +130,11 @@ fn test_method_parameter_type_checking() {
         value: i32,
     }
     
-    impl fn add(calc: &Calculator, other: i32): i32 {
+    fn (calc: &Calculator) add(other: i32): i32 {
         return calc.value + other;
     }
     
-    impl fn multiply(calc: &Calculator, factor: f64): f64 {
+    fn (calc: &Calculator) multiply(factor: f64): f64 {
         return calc.value * factor;  // i32 * f64は型エラー
     }
     
@@ -170,15 +167,14 @@ fn test_static_method_registration() {
         return Vector { x: 1.0, y: 0.0, z: 0.0 };
     }
     
-    impl fn dot(v1: &Vector, v2: &Vector): f64 {
+    fn (v1: &Vector) dot(v2: &Vector): f64 {
         return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
     }
     
     fn main() {
         let v1 = zero();
         let v2 = unit_x();
-        // dotはメソッドとして登録されるため、通常の関数として呼び出せない
-        // 現在のパーサーはメソッドコール構文をサポートしていない
+        let dot_product = v1.dot(v2);
     }
     "#;
     

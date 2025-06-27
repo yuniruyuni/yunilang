@@ -73,37 +73,37 @@ fn test_while_loops() {
 
 #[test]
 fn test_for_loops() {
-    // for文の解析テスト（whileループで代替）
-    // 注: 現在のパーサー実装ではfor文の初期化部にletがある場合の処理に問題があるため、
-    // whileループを使った等価なコードでテスト
+    // for文の解析テスト
     let source = r#"
     package main
     
     fn main() {
-        // for i = 0; i < 10; i = i + 1 の代わり
-        let mut i: i32 = 0;
-        while i < 10 {
+        // 標準的なfor文
+        for let mut i = 0; i < 10; i = i + 1 {
             println(i);
-            i = i + 1;
         }
         
-        // for文は現在のパーサー実装に問題があるため、
-        // 将来的な実装のためのプレースホルダーとしてコメントアウト
-        // let mut j: i32 = 0;
-        // for ; j < 5; j = j + 1 {
-        //     println(j);
-        // }
+        // 初期化部を省略したfor文
+        let mut j = 0;
+        for ; j < 5; j = j + 1 {
+            println(j);
+        }
+        
+        // 無限ループ
+        for {
+            println("infinite loop");
+            break;
+        }
     }
     "#;
     
     let ast = assert_parse_success(source);
     
     if let Item::Function(ref func) = ast.items[0] {
-        // while文が含まれていることを確認
-        let has_while = func.body.statements.iter().any(|stmt| {
-            matches!(stmt, Statement::While(_))
+        // for文が含まれていることを確認
+        let has_for = func.body.statements.iter().any(|stmt| {
+            matches!(stmt, Statement::For(_))
         });
-        assert!(has_while);
-        // for文は現在コメントアウトされているため、チェックをスキップ
+        assert!(has_for, "Should contain for statements");
     }
 }

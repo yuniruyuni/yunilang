@@ -86,7 +86,6 @@ fn test_match_expr_basic() -> YuniResult<()> {
 
 /// 識別子パターンを使用したマッチ式のテスト
 #[test]
-#[ignore = "Direct code generation test without semantic analysis"]
 fn test_match_expr_with_identifier_pattern() -> YuniResult<()> {
     let context = Context::create();
     let mut generator = CodeGenerator::new(&context, "test_module");
@@ -147,7 +146,6 @@ fn test_match_expr_with_identifier_pattern() -> YuniResult<()> {
 
 /// ガード付きマッチ式のテスト
 #[test]
-#[ignore = "Direct code generation test without semantic analysis"]
 fn test_match_expr_with_guard() -> YuniResult<()> {
     let context = Context::create();
     let mut generator = CodeGenerator::new(&context, "test_module");
@@ -220,9 +218,7 @@ fn test_match_expr_with_guard() -> YuniResult<()> {
 }
 
 /// パーサーからASTを生成してmatch式をコンパイルするテスト
-/// TODO: パーサーがmatch式をサポートした後に有効化する
 #[test]
-#[ignore = "Parser does not yet support match expressions"]
 fn test_match_expr_from_parser() -> YuniResult<()> {
     let source = r#"
 package test
@@ -232,12 +228,12 @@ type Result enum {
     Err {},
 }
 
-fn main() -> i32 {
+fn main(): i32 {
     let x = Result::Ok;
-    match x {
-        Result::Ok => { 0 },
-        Result::Err => { 1 },
-    }
+    return match x {
+        Result::Ok => 0,
+        Result::Err => 1,
+    };
 }
     "#;
     

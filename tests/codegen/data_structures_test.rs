@@ -78,7 +78,8 @@ fn test_array_expressions() {
     fn main() {
         // 固定サイズ配列
         let arr1 = [1, 2, 3, 4, 5];
-        // let arr2 = [0; 10];  // TODO: 配列の繰り返し初期化構文は未実装
+        // 配列の繰り返し初期化構文
+        let arr2 = [0; 10];  // 0を10個の配列
         
         // 異なる型の配列
         let float_arr = [1.0, 2.0, 3.0];

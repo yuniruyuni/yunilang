@@ -16,7 +16,6 @@ fn test_struct_type_checking() {
     fn distance(p1: Point, p2: Point): f64 {
         let dx = p1.x - p2.x;
         let dy = p1.y - p2.y;
-        // sqrtは未実装なので、簡略化
         return dx * dx + dy * dy;
     }
     

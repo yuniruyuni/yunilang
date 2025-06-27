@@ -3,7 +3,6 @@
 use super::*;
 
 #[test]
-#[ignore = "Circular dependency detection not yet implemented"]
 fn test_circular_dependency_detection() {
     // 循環依存の検出テスト
     let source = r#"
@@ -21,8 +20,7 @@ fn test_circular_dependency_detection() {
     }
     "#;
     
-    // 循環依存エラーは設計に依存するため、
-    // 具体的な実装に応じて調整が必要
+    // 循環依存エラーが検出されることを期待
     assert_analysis_error(source);
 }
 
