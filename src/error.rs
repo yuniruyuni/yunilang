@@ -147,6 +147,9 @@ pub enum AnalyzerError {
     #[error("到達不能コード")]
     UnreachableCode { span: Span },
     
+    #[error("循環依存が検出されました: {type1} と {type2}")]
+    CircularDependency { type1: String, type2: String, span: Span },
+    
     #[error("引数の数が一致しません: {expected}個を期待しましたが、{found}個が見つかりました")]
     ArgCountMismatch { expected: usize, found: usize, span: Span },
     
@@ -445,6 +448,11 @@ impl DiagnosticError {
             AnalyzerError::Internal { message } => (
                 format!("内部エラー: {}", message),
                 vec![],
+            ),
+            AnalyzerError::CircularDependency { type1, type2, span } => (
+                format!("循環依存が検出されました: {} と {}", type1, type2),
+                vec![Label::primary(self.file_id, span.start..span.end)
+                    .with_message("循環依存があります")],
             ),
         }
     }

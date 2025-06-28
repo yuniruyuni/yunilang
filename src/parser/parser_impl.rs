@@ -112,6 +112,11 @@ impl Parser {
             false
         }
     }
+    
+    /// 先読みしてトークンを取得（進まない）
+    pub(super) fn peek_ahead(&self, offset: usize) -> Option<&Token> {
+        self.tokens.get(self.current + offset).map(|t| &t.token)
+    }
 
     /// 特定のトークンにマッチしたら進む
     pub(super) fn match_token(&mut self, token_type: &Token) -> bool {

@@ -66,7 +66,7 @@ fn test_method_signature_registration() {
         // メソッドが登録されることを確認するテスト
         let p1 = Point { x: 0.0, y: 0.0 };
         let p2 = Point { x: 3.0, y: 4.0 };
-        let dist = p1.distance(p2);
+        let dist = p1.distance(&p2);
     }
     "#;
     
@@ -174,7 +174,7 @@ fn test_static_method_registration() {
     fn main() {
         let v1 = zero();
         let v2 = unit_x();
-        let dot_product = v1.dot(v2);
+        let dot_product = v1.dot(&v2);
     }
     "#;
     

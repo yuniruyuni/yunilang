@@ -177,4 +177,9 @@ impl TypeChecker {
             "f32" | "f64" | "bool" | "string" | "char"
         )
     }
+
+    /// すべての登録された型情報を取得
+    pub fn get_all_types(&self) -> Vec<&TypeInfo> {
+        self.types.values().collect()
+    }
 }

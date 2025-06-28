@@ -4,7 +4,7 @@ use crate::ast::*;
 use std::collections::HashMap;
 
 use super::lifetime::LifetimeContext;
-use super::symbol::{AnalysisError, AnalysisResult, Scope};
+use super::symbol::{AnalysisError, AnalysisResult, Scope, TypeKind};
 use super::type_checker::TypeChecker;
 use super::type_env::TypeEnvironment;
 
@@ -83,6 +83,11 @@ impl SemanticAnalyzer {
                 }
             }
         }
+        
+        // 循環依存をチェック
+        if let Err(e) = self.check_all_circular_dependencies() {
+            self.errors.push(e);
+        }
 
         // 第二パス: 関数とメソッドの本体を解析
         for item in &program.items {
@@ -136,5 +141,64 @@ impl SemanticAnalyzer {
                 // その他の場合は何もしない
             }
         }
+    }
+    
+    /// すべての型について循環依存をチェック
+    fn check_all_circular_dependencies(&self) -> AnalysisResult<()> {
+        let all_types = self.type_checker.get_all_types();
+        
+        for type_info in all_types {
+            if let TypeKind::Struct(fields) = &type_info.kind {
+                for field in fields {
+                    if let Type::UserDefined(field_type_name) = &field.ty {
+                        let mut visited = vec![type_info.name.clone()];
+                        if self.check_circular_dependency_impl(&type_info.name, &field_type_name, &mut visited) {
+                            return Err(AnalysisError::CircularDependency {
+                                type1: type_info.name.clone(),
+                                type2: field_type_name.clone(),
+                                span: field.span,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// 循環依存をチェック（実装）
+    fn check_circular_dependency_impl(&self, start_type: &str, current_type: &str, visited: &mut Vec<String>) -> bool {
+        // 開始型に戻ってきた場合、循環依存
+        if current_type == start_type {
+            return true;
+        }
+        
+        // すでに訪問済みの型の場合、このパスはチェック済み
+        if visited.contains(&current_type.to_string()) {
+            return false;
+        }
+        
+        // 現在の型の情報を取得
+        if let Some(type_info) = self.type_checker.get_type_info(current_type) {
+            if let TypeKind::Struct(fields) = &type_info.kind {
+                // 訪問済みリストに追加
+                visited.push(current_type.to_string());
+                
+                // 各フィールドをチェック
+                for field in fields {
+                    if let Type::UserDefined(field_type_name) = &field.ty {
+                        if self.check_circular_dependency_impl(start_type, &field_type_name, visited) {
+                            return true;
+                        }
+                    }
+                }
+                
+                // 訪問済みリストから削除
+                visited.pop();
+            }
+        }
+        
+        false
     }
 }

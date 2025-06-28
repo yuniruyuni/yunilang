@@ -39,8 +39,14 @@ impl Parser {
                 Ok(Item::TypeDef(TypeDef::Enum(enum_def)))
             }
             Some(Token::Fn) => {
-                let func = self.parse_function_decl_with_visibility(is_public)?;
-                Ok(Item::Function(func))
+                // fnの後に(が来る場合はメソッド構文
+                if self.peek_ahead(1) == Some(&Token::LeftParen) {
+                    let method = self.parse_method_decl_with_visibility(is_public)?;
+                    Ok(Item::Method(method))
+                } else {
+                    let func = self.parse_function_decl_with_visibility(is_public)?;
+                    Ok(Item::Function(func))
+                }
             }
             Some(Token::Impl) => {
                 let method = self.parse_method_decl_with_visibility(is_public)?;
@@ -277,8 +283,27 @@ impl Parser {
     fn parse_method_decl_with_visibility(&mut self, is_public: bool) -> ParseResult<MethodDecl> {
         let start = self.current_span().start;
 
-        self.expect(Token::Impl)?;
-        self.expect(Token::Fn)?;
+        // fn (receiver: Type) methodName() 構文をサポート
+        if self.check(&Token::Fn) {
+            self.advance(); // fn
+        } else if self.check(&Token::Impl) {
+            self.advance(); // impl (後方互換性のため)
+            self.expect(Token::Fn)?;
+        }
+        
+        // レシーバー解析
+        self.expect(Token::LeftParen)?;
+        let receiver = self.parse_receiver()?;
+        
+        // その他のパラメータ
+        let params = if self.match_token(&Token::Comma) {
+            self.parse_parameters()?
+        } else {
+            Vec::new()
+        };
+        self.expect(Token::RightParen)?;
+        
+        // メソッド名
         let name = self.expect_identifier()?;
         
         // 型パラメータ（オプション）
@@ -288,16 +313,9 @@ impl Parser {
             Vec::new()
         };
 
-        // レシーバー
+        // 追加パラメータ（もしあれば）
         self.expect(Token::LeftParen)?;
-        let receiver = self.parse_receiver()?;
-
-        // その他のパラメータ
-        let params = if self.match_token(&Token::Comma) {
-            self.parse_parameters()?
-        } else {
-            Vec::new()
-        };
+        let additional_params = self.parse_parameters()?;
         self.expect(Token::RightParen)?;
 
         // 戻り値型
@@ -324,7 +342,7 @@ impl Parser {
             name,
             type_params,
             receiver,
-            params,
+            params: additional_params,
             return_type,
             lives_clause,
             body,

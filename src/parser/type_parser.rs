@@ -164,12 +164,7 @@ impl Parser {
                     let type_args = self.parse_type_arguments()?;
                     Ok(Type::Generic(name, type_args))
                 } else {
-                    // 単一の大文字で始まる識別子は型変数として扱う
-                    if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
-                        Ok(Type::Variable(name))
-                    } else {
-                        Ok(Type::UserDefined(name))
-                    }
+                    Ok(Type::UserDefined(name))
                 }
             }
 
