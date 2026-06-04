@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "dependencyDashboard": false,
+  "dependencyDashboardApproval": false,
+  "prCreation": "immediate",
+  "timezone": "Asia/Tokyo",
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Group minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "minor-patch updates"
+    },
+    {
+      "description": "LLVM bindings",
+      "matchPackageNames": ["inkwell", "llvm-sys"],
+      "groupName": "llvm-bindings"
+    },
+    {
+      "description": "Parser and diagnostics",
+      "matchPackageNames": ["logos", "nom", "codespan-reporting"],
+      "groupName": "parser-diagnostics"
+    }
+  ]
+}
