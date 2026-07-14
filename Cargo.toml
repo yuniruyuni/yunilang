@@ -18,8 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 # LLVM bindings
-inkwell = { version = "0.5", features = ["llvm18-0"] }
-llvm-sys = "180.0"
+inkwell = { version = "0.9", features = ["llvm18-1"] }
 
 # Command line argument parsing
 clap = { version = "4.5", features = ["derive"] }
@@ -29,15 +28,15 @@ anyhow = "1.0"
 thiserror = "2.0"
 
 # Lexer/Parser utilities
-logos = "0.14"
-nom = "7.1"
+logos = "0.16"
+nom = "8.0"
 
 # Data structures
 indexmap = "2.2"
 
 # Pretty printing and diagnostics
-colored = "2.1"
-codespan-reporting = "0.11"
+colored = "3.0"
+codespan-reporting = "0.13"
 
 # Serialization (for AST dumping, etc.)
 serde = { version = "1.0", features = ["derive"] }
