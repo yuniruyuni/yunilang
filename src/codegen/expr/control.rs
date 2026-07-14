@@ -229,7 +229,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             "string_eq_result"
                         )?;
                         
-                        Ok(result.try_as_basic_value().left()
+                        Ok(result.try_as_basic_value().basic()
                             .ok_or_else(|| YuniError::Codegen(CodegenError::TypeError {
                                 expected: "bool value".to_string(),
                                 actual: "void".to_string(),

@@ -134,7 +134,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         concat_fn,
                         &[prev.into(), part_str.into()],
                         "concat_result",
-                    )?.try_as_basic_value().left().unwrap())
+                    )?.try_as_basic_value().basic().unwrap())
                 }
             };
         }
