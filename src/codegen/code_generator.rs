@@ -91,6 +91,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let element_size = self.get_size_of_type(vector_type.get_element_type());
                 element_size * vector_type.get_size() as u64
             }
+            BasicTypeEnum::ScalableVectorType(vector_type) => {
+                let element_size = self.get_size_of_type(vector_type.get_element_type());
+                element_size * vector_type.get_size() as u64
+            }
         }
     }
 
@@ -500,7 +504,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let size_value = self.builder.build_int_z_extend(element_size, self.context.i64_type(), "element_size")?;
         
         let result = self.builder.build_call(vec_new, &[size_value.into()], "vec_new")?;
-        Ok(result.try_as_basic_value().left()
+        Ok(result.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "vec_new returned void".to_string(),
             }))?
@@ -539,7 +543,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let index_i64 = self.builder.build_int_z_extend(index, self.context.i64_type(), "index_i64")?;
         
         let result_ptr = self.builder.build_call(vec_get, &[vec_ptr.into(), index_i64.into()], "vec_get_result")?;
-        let element_ptr = result_ptr.try_as_basic_value().left()
+        let element_ptr = result_ptr.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "vec_get returned void".to_string(),
             }))?
@@ -563,7 +567,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }))?;
         
         let result = self.builder.build_call(vec_len, &[vec_ptr.into()], "vec_len")?;
-        Ok(result.try_as_basic_value().left()
+        Ok(result.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "vec_len returned void".to_string(),
             }))?
@@ -593,7 +597,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let value_size_value = self.builder.build_int_z_extend(value_size, self.context.i64_type(), "value_size")?;
         
         let result = self.builder.build_call(hashmap_new, &[key_size_value.into(), value_size_value.into()], "hashmap_new")?;
-        Ok(result.try_as_basic_value().left()
+        Ok(result.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "hashmap_new returned void".to_string(),
             }))?
