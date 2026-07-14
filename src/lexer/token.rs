@@ -195,7 +195,7 @@ pub enum Token {
     Error,
 
     // コメント
-    #[regex(r"//[^\n]*", logos::skip)]
+    #[regex(r"//[^\n]*", logos::skip, allow_greedy = true)]
     #[regex(r"/\*([^*]|\*[^/])*\*/", logos::skip)]
     #[token("/*", |lex| {
         // ネストしたブロックコメントを処理
