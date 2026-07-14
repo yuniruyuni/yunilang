@@ -35,7 +35,7 @@ nom = "7.1"
 indexmap = "2.2"
 
 # Pretty printing and diagnostics
-colored = "2.1"
+colored = "3.0"
 codespan-reporting = "0.13"
 
 # Serialization (for AST dumping, etc.)
