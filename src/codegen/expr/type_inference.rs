@@ -39,7 +39,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     to_string_fn,
                     &[int_val_as_i64.into()],
                     "int_to_string_result",
-                )?.try_as_basic_value().left()
+                )?.try_as_basic_value().basic()
                     .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                         message: "yuni_int_to_string should return a value".to_string(),
                     }))?;
@@ -57,7 +57,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     to_string_fn,
                     &[float_val.into()],
                     "float_to_string_result",
-                )?.try_as_basic_value().left()
+                )?.try_as_basic_value().basic()
                     .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                         message: "yuni_float_to_string should return a value".to_string(),
                     }))?;

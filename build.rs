@@ -10,11 +10,11 @@ fn main() {
     println!("cargo:warning=Yuni Language Compiler requires LLVM 18 to be installed.");
     println!("cargo:warning=On macOS: brew install llvm@18");
     println!("cargo:warning=On Ubuntu/Debian: apt-get install llvm-18-dev");
-    println!("cargo:warning=Or set LLVM_SYS_180_PREFIX to your LLVM installation path");
+    println!("cargo:warning=Or set LLVM_SYS_181_PREFIX to your LLVM installation path");
 
     // Check if LLVM is available
-    if let Ok(llvm_config) = env::var("LLVM_SYS_180_PREFIX") {
-        println!("cargo:rustc-env=LLVM_SYS_180_PREFIX={}", llvm_config);
+    if let Ok(llvm_config) = env::var("LLVM_SYS_181_PREFIX") {
+        println!("cargo:rustc-env=LLVM_SYS_181_PREFIX={}", llvm_config);
     } else {
         // Try to find llvm-config in PATH
         let llvm_config_cmd = if cfg!(target_os = "macos") {
@@ -36,7 +36,7 @@ fn main() {
         if let Ok(output) = Command::new(llvm_config_cmd).arg("--prefix").output() {
             if output.status.success() {
                 let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                println!("cargo:rustc-env=LLVM_SYS_180_PREFIX={}", prefix);
+                println!("cargo:rustc-env=LLVM_SYS_181_PREFIX={}", prefix);
             }
         }
     }

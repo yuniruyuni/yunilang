@@ -54,7 +54,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             
             // パラメータの型に合わせて変換
             if i < param_types.len() {
-                let expected_type = param_types[i];
+                let expected_type = param_types[i].try_into().map_err(|_| {
+                    YuniError::Codegen(CodegenError::InvalidType {
+                        message: "Metadata parameters cannot accept runtime values".to_string(),
+                        span: arg.span(),
+                    })
+                })?;
                 let coerced_value = self.coerce_to_type(arg_value, expected_type, arg.span())?;
                 args.push(coerced_value.into());
             } else {
@@ -70,7 +75,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             call_site.set_tail_call(true);
         }
         
-        if let Some(value) = call_site.try_as_basic_value().left() {
+        if let Some(value) = call_site.try_as_basic_value().basic() {
             Ok(value)
         } else {
             // void関数の場合、unit値を返す
@@ -140,7 +145,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     concat_fn, 
                     &[result_str.into(), arg_str.into()], 
                     "concat_result"
-                )?.try_as_basic_value().left().unwrap();
+                )?.try_as_basic_value().basic().unwrap();
             }
 
             // 改行を追加
@@ -159,7 +164,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 concat_fn, 
                 &[result_str.into(), newline_ptr.into()], 
                 "concat_newline"
-            )?.try_as_basic_value().left().unwrap();
+            )?.try_as_basic_value().basic().unwrap();
 
             // %s形式で出力
             let format_str = self.context.const_string(b"%s", true);
@@ -236,7 +241,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // メソッドを呼び出し
         let call_result = self.builder.build_call(func, &args, "method_call_result")?;
         
-        if let Some(value) = call_result.try_as_basic_value().left() {
+        if let Some(value) = call_result.try_as_basic_value().basic() {
             Ok(value)
         } else {
             // voidを返す関数の場合
