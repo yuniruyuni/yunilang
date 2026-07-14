@@ -29,7 +29,7 @@ thiserror = "1.0"
 
 # Lexer/Parser utilities
 logos = "0.16"
-nom = "7.1"
+nom = "8.0"
 
 # Data structures
 indexmap = "2.2"
