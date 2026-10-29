@@ -1,0 +1,37 @@
+name: LLVM 18 ビルドとテスト
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      LLVM_SYS_181_PREFIX: /usr/lib/llvm-18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: LLVM 18 とリンク用ライブラリを準備
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends llvm-18-dev libpolly-18-dev clang-18 zlib1g-dev libzstd-dev
+          echo "/usr/lib/llvm-18/bin" >> "$GITHUB_PATH"
+          /usr/lib/llvm-18/bin/llvm-config --version
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.98.1
+
+      - name: 通常ビルド
+        run: cargo build --locked
+
+      - name: テスト
+        run: cargo test --locked --no-fail-fast
