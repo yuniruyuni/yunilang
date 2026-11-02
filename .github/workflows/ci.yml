@@ -28,7 +28,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: 1.98.1
+          toolchain: 1.99.1
 
       - name: 通常ビルド
         run: cargo build --locked
