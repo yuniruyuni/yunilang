@@ -25,7 +25,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             vec_new_fn,
             &[size_value.into()],
             "vec_new"
-        )?.try_as_basic_value().left()
+        )?.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "yuni_vec_new should return a value".to_string(),
             }))?;
@@ -80,7 +80,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             vec_get_fn,
             &[vec_ptr.into(), index_i64.into()],
             "element_ptr"
-        )?.try_as_basic_value().left()
+        )?.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "yuni_vec_get should return a value".to_string(),
             }))?;
@@ -110,7 +110,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             vec_len_fn,
             &[vec_ptr.into()],
             "vec_len"
-        )?.try_as_basic_value().left()
+        )?.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "yuni_vec_len should return a value".to_string(),
             }))?;
@@ -139,7 +139,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             hashmap_new_fn,
             &[key_size_value.into(), value_size_value.into()],
             "hashmap_new"
-        )?.try_as_basic_value().left()
+        )?.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::Internal {
                 message: "yuni_hashmap_new should return a value".to_string(),
             }))?;
@@ -213,6 +213,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 size
             }
             BasicTypeEnum::VectorType(vec_ty) => {
+                let element_size = self.get_size_of_type(vec_ty.get_element_type());
+                element_size * vec_ty.get_size() as u64
+            }
+            BasicTypeEnum::ScalableVectorType(vec_ty) => {
                 let element_size = self.get_size_of_type(vec_ty.get_element_type());
                 element_size * vec_ty.get_size() as u64
             }

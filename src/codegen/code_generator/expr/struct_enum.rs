@@ -107,7 +107,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 malloc_fn,
                                 &[size_value.into()],
                                 "some_ptr"
-                            )?.try_as_basic_value().left().unwrap();
+                            )?.try_as_basic_value().basic().unwrap();
                             
                             let ptr_type = self.context.ptr_type(AddressSpace::default());
                             let typed_ptr = self.builder.build_pointer_cast(
@@ -161,7 +161,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 malloc_fn,
                                 &[size_value.into()],
                                 "result_value_ptr"
-                            )?.try_as_basic_value().left().unwrap();
+                            )?.try_as_basic_value().basic().unwrap();
                             
                             let ptr_type = self.context.ptr_type(AddressSpace::default());
                             let typed_ptr = self.builder.build_pointer_cast(

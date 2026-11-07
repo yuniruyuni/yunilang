@@ -42,7 +42,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             alloc_fn,
             &[total_size.into()],
             "array_alloc"
-        )?.try_as_basic_value().left()
+        )?.try_as_basic_value().basic()
             .ok_or_else(|| YuniError::Codegen(CodegenError::InvalidType {
                 message: "メモリ割り当て関数が値を返しませんでした".to_string(),
                 span: array.span,
